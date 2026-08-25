@@ -1,0 +1,101 @@
+---
+import { clinic } from '../data/clinic';
+import { getCollection } from 'astro:content';
+
+// Hide the news section until there is something in it — an empty "Dental
+// News" page at launch reads as unfinished.
+const hasNews = (await getCollection('news', ({ data }) => !data.draft)).length > 0;
+
+const path = Astro.url.pathname;
+const isActive = (href: string) =>
+  href === '/' ? path === '/' : path.startsWith(href);
+
+const nav = [
+  { href: '/services/', label: 'Services' },
+  { href: '/about/',    label: 'About' },
+  ...(hasNews ? [{ href: '/news/', label: 'Dental News' }] : []),
+  { href: '/contact/',  label: 'Contact' },
+];
+---
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a href="/" class="brand" aria-label={`${clinic.name} — home`}>
+      <img src="/logo.png" alt="" width="52" height="52" />
+      <span class="brand-text">
+        <strong>Sri Shankara</strong>
+        <small>Dental Clinic</small>
+      </span>
+    </a>
+
+    <input type="checkbox" id="navToggle" class="visually-hidden" />
+    <label for="navToggle" class="nav-toggle" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </label>
+
+    <nav class="site-nav" aria-label="Primary">
+      {nav.map((item) => (
+        <a href={item.href} aria-current={isActive(item.href) ? 'page' : undefined}>
+          {item.label}
+        </a>
+      ))}
+      <a href={clinic.phoneHref} class="btn btn--accent nav-cta">Call the clinic</a>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .site-header {
+    position: sticky; top: 0; z-index: 50;
+    background: rgb(255 255 255 / 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .header-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; padding-block: .7rem;
+  }
+  .brand { display: flex; align-items: center; gap: .7rem; text-decoration: none; color: inherit; }
+  .brand img { border-radius: 8px; }
+  .brand-text { display: flex; flex-direction: column; line-height: 1.1; }
+  .brand-text strong {
+    font-family: var(--font-head); font-size: 1.15rem;
+    color: var(--navy-800); font-weight: 600;
+  }
+  .brand-text small {
+    font-size: .72rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--orange-700); font-weight: 600;
+  }
+
+  .site-nav { display: flex; align-items: center; gap: 1.6rem; }
+  .site-nav a {
+    text-decoration: none; font-weight: 500; font-size: .975rem;
+    color: var(--ink); padding-block: .3rem;
+    border-bottom: 2px solid transparent;
+  }
+  .site-nav a:hover { color: var(--navy-700); }
+  .site-nav a[aria-current='page'] { color: var(--navy-700); border-bottom-color: var(--orange-500); }
+  .nav-cta, .site-nav a.nav-cta:hover { border-bottom: none; color: var(--navy-900); }
+
+  .nav-toggle { display: none; }
+
+  @media (max-width: 860px) {
+    .nav-toggle {
+      display: flex; flex-direction: column; gap: 5px;
+      padding: .6rem; cursor: pointer; border-radius: 8px;
+    }
+    .nav-toggle span { display: block; width: 22px; height: 2px; background: var(--navy-800); border-radius: 2px; }
+    #navToggle:focus-visible + .nav-toggle { outline: 3px solid var(--orange-500); outline-offset: 2px; }
+
+    .site-nav {
+      position: absolute; inset: 100% 0 auto 0;
+      flex-direction: column; align-items: stretch; gap: 0;
+      background: #fff; border-bottom: 1px solid var(--line);
+      padding: .5rem 1.25rem 1.25rem;
+      display: none;
+    }
+    #navToggle:checked ~ .site-nav { display: flex; }
+    .site-nav a { padding: .85rem 0; border-bottom: 1px solid var(--line); }
+    .site-nav a[aria-current='page'] { border-bottom-color: var(--line); }
+    .nav-cta { margin-top: 1rem; justify-content: center; }
+  }
+</style>

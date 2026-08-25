@@ -1,0 +1,24 @@
+{
+  "name": "sri-shankara-dental",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "check:compliance": "node scripts/check-compliance.mjs",
+    "check:launch": "node scripts/check-launch.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@astrojs/rss": "^4.0.19",
+    "@astrojs/sitemap": "^3.7.3",
+    "astro": "^7.2.6"
+  },
+  "type": "module",
+  "private": true
+}

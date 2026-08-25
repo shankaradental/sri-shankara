@@ -1,0 +1,106 @@
+---
+import Base from '../layouts/Base.astro';
+import { clinic, formattedAddress } from '../data/clinic';
+
+const lastUpdated = new Date().toLocaleDateString('en-IN', {
+  day: 'numeric', month: 'long', year: 'numeric',
+});
+---
+<Base
+  title="Privacy notice"
+  description="How Sri Shankara Dental Clinic collects, uses and stores personal data submitted through this website, under the Digital Personal Data Protection Act 2023."
+>
+  <section class="section">
+    <div class="wrap-narrow prose">
+      <p class="eyebrow">Legal</p>
+      <h1>Privacy notice</h1>
+      <p class="lede">
+        This notice explains what personal data this website collects, why, and
+        what you can do about it. It is written to meet the requirements of the
+        Digital Personal Data Protection Act 2023 and the DPDP Rules 2025.
+      </p>
+
+      <p><strong>Data fiduciary:</strong> {clinic.name}, {formattedAddress()}.</p>
+
+      <h2>What we collect, and why</h2>
+      <p>
+        This website collects personal data only when you choose to send it
+        through the appointment request form. That is:
+      </p>
+      <ul>
+        <li><strong>Your name and phone number</strong> — so we can call you back to arrange an appointment.</li>
+        <li><strong>Your email address</strong>, if you give it — as an alternative way to reach you, and to send the dental news email if you asked for it.</li>
+        <li><strong>What you tell us in the message field</strong> — so we can prepare for your visit.</li>
+      </ul>
+      <p>
+        We do not use this data for any other purpose, and we do not sell it or
+        share it for advertising.
+      </p>
+
+      <h2>Please do not send clinical details through this form</h2>
+      <p>
+        The form is for arranging appointments. Please do not include medical
+        history, symptoms in detail, or images through it. Bring that to your
+        appointment, or phone the clinic.
+      </p>
+
+      <h2>How long we keep it</h2>
+      <p>
+        Enquiries that do not become appointments are deleted within
+        24 months. Where you become a patient, your contact details
+        become part of your clinical record and are retained in line with the
+        clinic's records policy.
+      </p>
+
+      <h2>Who processes it</h2>
+      <p>
+        Form submissions are delivered to the clinic's email by Web3Forms. The
+        dental news email, if you subscribe, is sent by Brevo. This site
+        is hosted by Cloudflare. These providers process data on our
+        instructions only.
+      </p>
+
+      <h2>Your rights</h2>
+      <p>Under the DPDP Act you may:</p>
+      <ul>
+        <li>ask what personal data of yours we hold and how it is being processed;</li>
+        <li>ask us to correct or complete inaccurate data;</li>
+        <li>ask us to erase your data, where we are not required to keep it;</li>
+        <li>withdraw your consent at any time, as easily as you gave it;</li>
+        <li>nominate another person to exercise these rights on your behalf;</li>
+        <li>raise a grievance with us, and escalate to the Data Protection Board of India if it is not resolved.</li>
+      </ul>
+
+      <h2>Withdrawing consent</h2>
+      <p>
+        Email <a href={`mailto:${clinic.grievanceOfficer.email}`}>{clinic.grievanceOfficer.email}</a>
+        and we will stop processing your data and delete it, unless we are
+        required by law to retain it. To stop the news email, use the
+        unsubscribe link at the foot of any issue.
+      </p>
+
+      <h2>Grievance officer</h2>
+      <p>
+        {clinic.grievanceOfficer.name === 'PLACEHOLDER'
+          ? `The Practice Manager, ${clinic.name}`
+          : clinic.grievanceOfficer.name}<br />
+        <a href={`mailto:${clinic.grievanceOfficer.email}`}>{clinic.grievanceOfficer.email}</a>
+      </p>
+      <p>We aim to respond to any grievance within 30 days.</p>
+
+      <h2>Cookies and analytics</h2>
+      <p>
+        This site sets no advertising or tracking cookies, and does not use
+        third-party analytics. The only data that leaves your browser is what
+        you choose to type into the appointment form.
+      </p>
+
+      <h2>Changes to this notice</h2>
+      <p>
+        If this notice changes materially we will update the date below and,
+        where required, contact you.
+      </p>
+      <p><em>Last updated: {lastUpdated}</em></p>
+    </div>
+  </section>
+</Base>

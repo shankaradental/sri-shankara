@@ -1,0 +1,93 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection, render } from 'astro:content';
+import { clinic } from '../../data/clinic';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('news', ({ data }) => !data.draft);
+  return posts.map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+
+const fmt = (d: Date) =>
+  d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+
+const articleSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Article',
+  headline: entry.data.title,
+  description: entry.data.description,
+  datePublished: entry.data.pubDate.toISOString(),
+  ...(entry.data.updatedDate ? { dateModified: entry.data.updatedDate.toISOString() } : {}),
+  author: { '@type': 'Organization', name: clinic.name },
+  reviewedBy: { '@type': 'Person', name: entry.data.reviewedBy },
+  publisher: { '@type': 'Organization', name: clinic.name },
+  citation: entry.data.sources.map((s) => s.url),
+};
+---
+<Base title={entry.data.title} description={entry.data.description}>
+  <script slot="head" type="application/ld+json" set:html={JSON.stringify(articleSchema)} />
+
+  <article class="section">
+    <div class="wrap-narrow">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="/">Home</a> <span aria-hidden="true">/</span>
+        <a href="/news/">Dental news</a>
+      </nav>
+
+      <span class="tag">{entry.data.category}</span>
+      <h1 style="margin-top:.8rem">{entry.data.title}</h1>
+
+      <p class="byline">
+        Published {fmt(entry.data.pubDate)}
+        {entry.data.updatedDate && <> &middot; updated {fmt(entry.data.updatedDate)}</>}
+        <br />
+        <span>Reviewed by {entry.data.reviewedBy}</span>
+      </p>
+
+      <div class="prose">
+        <Content />
+      </div>
+
+      <section class="sources">
+        <h2>Sources</h2>
+        <ol>
+          {entry.data.sources.map((s) => (
+            <li><a href={s.url} rel="nofollow noopener" target="_blank">{s.title}</a></li>
+          ))}
+        </ol>
+      </section>
+
+      <aside class="disclaimer">
+        <p>
+          This article summarises published research for general interest. It is
+          not dental advice, does not describe treatment offered at this clinic,
+          and is no substitute for an examination by a registered dentist.
+        </p>
+      </aside>
+    </div>
+  </article>
+</Base>
+
+<style>
+  .crumbs { font-size: .875rem; color: var(--ink-muted); margin-bottom: 1.2rem; }
+  .crumbs a { color: var(--ink-muted); }
+  .crumbs span { margin-inline: .4rem; }
+
+  .byline { color: var(--ink-muted); font-size: .9375rem; margin-bottom: 2.2rem; }
+  .byline span { color: var(--navy-700); font-weight: 500; }
+
+  .sources { margin-top: 3rem; padding-top: 1.75rem; border-top: 1px solid var(--line); }
+  .sources h2 { font-size: 1.05rem; }
+  .sources ol { padding-left: 1.2em; font-size: .9375rem; }
+  .sources li { margin-bottom: .45em; }
+
+  .disclaimer {
+    margin-top: 2.5rem; padding: 1.1rem 1.3rem;
+    background: var(--navy-50); border-radius: var(--radius);
+    font-size: .9375rem; color: var(--ink-muted);
+  }
+  .disclaimer p { margin-bottom: 0; }
+</style>

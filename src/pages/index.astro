@@ -1,0 +1,149 @@
+---
+import Base from '../layouts/Base.astro';
+import { clinic, formatSessions } from '../data/clinic';
+import { getCollection } from 'astro:content';
+
+const services = (await getCollection('services', ({ data }) => !data.draft))
+  .sort((a, b) => a.data.order - b.data.order)
+  .slice(0, 6);
+
+const news = (await getCollection('news', ({ data }) => !data.draft))
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
+  .slice(0, 3);
+
+const fmt = (d: Date) =>
+  d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+---
+<Base
+  title={clinic.name}
+  description={`${clinic.name} — dental care in Tapovan Enclave, Dehradun. Check-ups, root canal treatment, implants, braces and emergency care.`}
+>
+  <section class="hero">
+    <div class="wrap hero-inner">
+      <div>
+        <p class="eyebrow">Tapovan Enclave &middot; Dehradun</p>
+        <h1>Careful dental treatment, explained before it starts.</h1>
+        <p class="lede">
+          From routine check-ups to root canals, implants and emergencies — with
+          the reasoning behind every recommendation set out plainly, so you can
+          decide what is right for you.
+        </p>
+        <div class="hero-actions">
+          <a href={clinic.phoneHref} class="btn btn--accent">Call {clinic.phone}</a>
+          <a href="/contact/" class="btn btn--ghost">Request an appointment</a>
+        </div>
+      </div>
+      <aside class="hero-card" aria-label="Clinic at a glance">
+        <h2>At a glance</h2>
+        <dl>
+          <div>
+            <dt>Where</dt>
+            <dd>{clinic.address.locality}<br />{clinic.address.city}</dd>
+          </div>
+          <div>
+            <dt>Mon&ndash;Fri</dt>
+            <dd>{formatSessions(clinic.hours[0].sessions)}</dd>
+          </div>
+          <div>
+            <dt>Saturday</dt>
+            <dd>{formatSessions(clinic.hours[5].sessions)}</dd>
+          </div>
+          <div>
+            <dt>Sunday</dt>
+            <dd>Closed</dd>
+          </div>
+        </dl>
+        <p class="hero-card-foot">
+          <a href="/contact/">Directions &amp; map &rarr;</a>
+        </p>
+      </aside>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <p class="eyebrow">Treatments</p>
+      <h2>What we treat</h2>
+      <p class="lede">Each page sets out what the treatment involves, what to expect afterwards, and what the alternatives are.</p>
+      <div class="grid grid--2 grid--3" style="margin-top:2rem">
+        {services.map((s) => (
+          <a class="card card--link" href={`/services/${s.id}/`}>
+            <h3>{s.data.title}</h3>
+            <p>{s.data.summary}</p>
+          </a>
+        ))}
+      </div>
+      <p style="margin-top:1.75rem"><a href="/services/">All treatments &rarr;</a></p>
+    </div>
+  </section>
+
+  <section class="section section--tint">
+    <div class="wrap">
+      <div class="emergency">
+        <p class="eyebrow">Urgent</p>
+        <h2>In pain, or had an injury?</h2>
+        <p>
+          Phone the clinic before travelling so we can advise you and make time.
+          If there is swelling affecting breathing, swallowing or vision, go
+          straight to a hospital rather than a dental clinic.
+        </p>
+        <a href="/services/dental-emergency/" class="btn btn--primary">What to do in an emergency</a>
+      </div>
+    </div>
+  </section>
+
+  {news.length > 0 && (
+    <section class="section">
+      <div class="wrap">
+        <p class="eyebrow">Dental news</p>
+        <h2>From dental research</h2>
+        <p class="lede">Short, sourced summaries of new work in dentistry — reviewed before publication.</p>
+        <div class="grid grid--3" style="margin-top:2rem">
+          {news.map((n) => (
+            <a class="card card--link" href={`/news/${n.id}/`}>
+              <span class="tag">{n.data.category}</span>
+              <h3 style="margin-top:.7rem">{n.data.title}</h3>
+              <p>{n.data.description}</p>
+              <p class="meta">{fmt(n.data.pubDate)}</p>
+            </a>
+          ))}
+        </div>
+        <p style="margin-top:1.75rem"><a href="/news/">All dental news &rarr;</a></p>
+      </div>
+    </section>
+  )}
+</Base>
+
+<style>
+  .hero { background: linear-gradient(160deg, var(--navy-50), #fff 60%); border-bottom: 1px solid var(--line); }
+  .hero-inner {
+    display: grid; gap: 2.5rem; align-items: center;
+    padding-block: clamp(3rem, 7vw, 5.5rem);
+  }
+  @media (min-width: 900px) { .hero-inner { grid-template-columns: 1.35fr .65fr; } }
+  .hero h1 { margin-bottom: .6rem; }
+  .hero-actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 1.8rem; }
+  .hero-card {
+    background: #fff; border: 1px solid var(--line);
+    border-top: 4px solid var(--orange-500);
+    border-radius: var(--radius-lg); padding: 1.6rem 1.8rem;
+    box-shadow: var(--shadow);
+  }
+  .hero-card h2 {
+    font-family: var(--font-sans); font-size: .78rem;
+    letter-spacing: .1em; text-transform: uppercase;
+    color: var(--orange-700); margin-bottom: 1rem;
+  }
+  .hero-card dl { margin: 0; }
+  .hero-card dl > div {
+    display: flex; justify-content: space-between; gap: 1rem;
+    padding-block: .5rem; border-bottom: 1px solid var(--line);
+  }
+  .hero-card dt { color: var(--ink-muted); font-size: .9375rem; }
+  .hero-card dd { margin: 0; font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
+  .hero-card-foot { margin: 1.1rem 0 0; font-size: .9375rem; }
+  @media (max-width: 899px) { .hero-card { display: none; } }
+
+  .emergency { max-width: 62ch; margin-inline: 0; }
+  .meta { color: var(--ink-muted); font-size: .875rem; margin-bottom: 0; }
+</style>

@@ -1,0 +1,25 @@
+name: Weekly newsletter
+
+# Sends a digest of the week's articles. Also serverless — this reads the
+# published RSS feed and hands a campaign to the email provider's API.
+on:
+  schedule:
+    # 04:30 UTC Friday = 10:00 IST Friday.
+    - cron: '30 4 * * 5'
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build and send the digest
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          BREVO_LIST_ID: ${{ vars.BREVO_LIST_ID }}
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: node scripts/send-newsletter.mjs

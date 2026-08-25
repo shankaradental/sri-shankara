@@ -1,0 +1,93 @@
+---
+import { clinic, formattedAddress, formatSessions } from '../data/clinic';
+import { getCollection } from 'astro:content';
+
+const hasNews = (await getCollection('news', ({ data }) => !data.draft)).length > 0;
+const year = new Date().getFullYear();
+
+---
+<footer class="site-footer">
+  <div class="wrap foot-grid">
+    <div>
+      <p class="foot-brand">{clinic.name}</p>
+      <p class="foot-muted">{formattedAddress()}</p>
+      <p class="foot-muted">
+        <a href={clinic.phoneHref}>{clinic.phone}</a><br />
+        {clinic.landline && <><a href={clinic.landlineHref}>{clinic.landline}</a><br /></>}
+        <a href={`mailto:${clinic.email}`}>{clinic.email}</a>
+      </p>
+    </div>
+
+    <div>
+      <h2 class="foot-head">Opening hours</h2>
+      <dl class="hours">
+        {clinic.hours.map((h) => (
+          <div><dt>{h.day}</dt><dd>{formatSessions(h.sessions)}</dd></div>
+        ))}
+      </dl>
+    </div>
+
+    <div>
+      <h2 class="foot-head">Explore</h2>
+      <ul class="foot-links">
+        <li><a href="/services/">Services</a></li>
+        <li><a href="/about/">About the clinic</a></li>
+        {hasNews && <li><a href="/news/">Dental news</a></li>}
+        <li><a href="/contact/">Contact &amp; directions</a></li>
+        <li><a href="/privacy/">Privacy notice</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="wrap foot-legal">
+    <p>&copy; {year} {clinic.name}. All rights reserved.</p>
+    <p class="disclaimer">
+      Information on this website is general in nature and is not a substitute for
+      an individual consultation, examination or diagnosis. Treatment outcomes vary
+      between patients. Please speak to a registered dental practitioner about your
+      own circumstances.
+    </p>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    margin-top: 4rem;
+    background: var(--navy-800);
+    color: #d9dbef;
+    padding-block: 3rem 1.75rem;
+    font-size: .9375rem;
+  }
+  .site-footer a { color: #fff; text-decoration: none; }
+  .site-footer a:hover { color: var(--orange-300); text-decoration: underline; }
+
+  .foot-grid { display: grid; gap: 2.25rem; }
+  @media (min-width: 760px) { .foot-grid { grid-template-columns: 1.4fr 1fr 1fr; } }
+
+  .foot-brand {
+    font-family: var(--font-head); font-size: 1.2rem;
+    color: #fff; margin-bottom: .5rem;
+  }
+  .foot-muted { color: #b6b9dd; margin-bottom: .6rem; }
+  .foot-head {
+    font-family: var(--font-sans); font-size: .78rem;
+    letter-spacing: .1em; text-transform: uppercase;
+    color: var(--orange-300); margin-bottom: .9rem;
+  }
+
+  .hours { margin: 0; }
+  .hours > div { display: flex; justify-content: space-between; gap: 1rem; padding-block: .22rem; }
+  .hours dd { text-align: right; }
+  .hours dt { color: #b6b9dd; }
+  .hours dd { margin: 0; color: #fff; font-variant-numeric: tabular-nums; }
+
+  .foot-links { list-style: none; margin: 0; padding: 0; }
+  .foot-links li { padding-block: .18rem; }
+
+  .foot-legal {
+    margin-top: 2.5rem; padding-top: 1.5rem;
+    border-top: 1px solid rgb(255 255 255 / 0.14);
+    color: #9ea2cc; font-size: .8125rem;
+  }
+  .disclaimer { max-width: 70ch; margin-bottom: 0; }
+</style>

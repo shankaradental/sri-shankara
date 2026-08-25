@@ -1,0 +1,62 @@
+---
+/**
+ * Dentist / LocalBusiness structured data.
+ *
+ * This is the single highest-leverage SEO element on a clinic site: it tells
+ * Google the name, address, phone, hours and geo-coordinates in a machine-
+ * readable form, which feeds the local map pack.
+ *
+ * Rendered once, in the base layout, on every page.
+ */
+import { clinic, formattedAddress } from '../data/clinic';
+
+const dayMap: Record<string, string> = {
+  Monday: 'Mo', Tuesday: 'Tu', Wednesday: 'We', Thursday: 'Th',
+  Friday: 'Fr', Saturday: 'Sa', Sunday: 'Su',
+};
+
+// One entry per session, so the midday closure is expressed correctly rather
+// than implying the clinic is open straight through.
+const openingHours = clinic.hours.flatMap((h) =>
+  h.sessions.map(([opens, closes]) => ({
+    '@type': 'OpeningHoursSpecification',
+    dayOfWeek: `https://schema.org/${h.day}`,
+    opens,
+    closes,
+  }))
+);
+
+const sameAs = Object.values(clinic.profiles).filter(Boolean);
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'Dentist',
+  name: clinic.name,
+  description: clinic.tagline,
+  url: Astro.site?.href,
+  telephone: clinic.phone,
+  ...(clinic.landline ? { contactPoint: [{ '@type': 'ContactPoint', telephone: clinic.landline, contactType: 'reservations' }] } : {}),
+  email: clinic.email,
+  address: {
+    '@type': 'PostalAddress',
+    streetAddress: `${clinic.address.street}, ${clinic.address.locality}`,
+    addressLocality: clinic.address.city,
+    addressRegion: clinic.address.region,
+    postalCode: clinic.address.postalCode,
+    addressCountry: clinic.address.country,
+  },
+  ...(clinic.geo.lat && clinic.geo.lng
+    ? { geo: { '@type': 'GeoCoordinates', latitude: clinic.geo.lat, longitude: clinic.geo.lng } }
+    : {}),
+  openingHoursSpecification: openingHours,
+  ...(sameAs.length ? { sameAs } : {}),
+  areaServed: { '@type': 'City', name: 'Dehradun' },
+  // NOTE: deliberately no aggregateRating / review markup. Ratings pulled onto
+  // your own site read as solicited endorsement, which sits badly against the
+  // DCI code's restrictions on solicitation. Reviews belong on Google.
+};
+---
+<script type="application/ld+json" set:html={JSON.stringify(schema)} />
+<meta name="geo.placename" content={`${clinic.address.locality}, ${clinic.address.city}`} />
+<meta name="geo.region" content="IN-UT" />
+<meta name="business:contact_data:street_address" content={formattedAddress()} />

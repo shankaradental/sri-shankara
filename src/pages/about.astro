@@ -1,0 +1,175 @@
+---
+import Base from '../layouts/Base.astro';
+import { clinic } from '../data/clinic';
+import { getCollection } from 'astro:content';
+
+const services = (await getCollection('services', ({ data }) => !data.draft)).sort(
+  (a, b) => a.data.order - b.data.order
+);
+
+const facilities = [
+  {
+    title: 'A modern, well-equipped clinic',
+    body: 'Purpose-built treatment rooms with contemporary dental units, so routine and complex work can both be carried out on site without referring you elsewhere for the everyday things.',
+  },
+  {
+    title: 'Sterilisation and infection control',
+    body: 'Instruments are cleaned, packed and autoclaved between every patient, with single-use items where single-use is appropriate. Surfaces are disinfected between appointments. This is the part of a clinic patients never see and should never have to think about.',
+  },
+  {
+    title: 'Digital diagnostics',
+    body: 'Digital imaging gives clearer detail at a lower radiation dose than film, and the images are on screen immediately — which means you can see what we are seeing while the treatment options are being explained.',
+  },
+  {
+    title: 'An unhurried approach',
+    body: 'Appointments are scheduled with enough time to explain what is happening before it happens. If you are anxious about dental treatment, say so when you book and we will plan the visit around it.',
+  },
+  {
+    title: 'Care for children and adults',
+    body: 'Families are treated across generations, from a child\'s first check-up through to restorative work later in life. Children\'s appointments are kept short and positive, because an early good experience shapes how someone feels about dentistry for decades.',
+  },
+];
+---
+<Base
+  title="About the clinic"
+  description="Sri Shankara Dental Clinic in Tapovan Enclave, Dehradun — our facilities, our approach to treatment, and the services we provide for children and adults."
+>
+  <section class="section">
+    <div class="wrap-narrow">
+      <p class="eyebrow">About</p>
+      <h1>Comfort, safety and careful dentistry</h1>
+      <p class="lede">
+        Welcome to Sri Shankara Dental Clinic. Patient comfort, clinical safety
+        and quality dental care are what we organise the practice around — not
+        as a slogan, but as the things that decide how appointments are
+        scheduled, how treatment rooms are prepared, and how much time is spent
+        explaining a diagnosis before anyone picks up an instrument.
+      </p>
+
+      <div class="prose">
+        <p>
+          Most people arrive at a dental clinic somewhere between mildly
+          reluctant and genuinely anxious. We take that seriously. You will be
+          told what is wrong, what the options are, what each one involves and
+          what each one costs, before treatment starts. If a tooth can be
+          watched rather than treated, we will say so. If something needs doing
+          now to avoid a bigger problem later, we will explain why rather than
+          simply booking you in.
+        </p>
+        <p>
+          The clinic serves families across Tapovan Enclave and the wider
+          Dehradun area, providing everyday preventive care alongside
+          restorative, surgical and orthodontic treatment.
+        </p>
+      </div>
+
+      <section class="block">
+        <h2>Our facilities</h2>
+        <div class="stack">
+          {facilities.map((f) => (
+            <article class="item">
+              <h3>{f.title}</h3>
+              <p>{f.body}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section class="block">
+        <h2>Services available</h2>
+        <p class="sub">
+          Each treatment has its own page explaining what is involved, what
+          recovery is like, and what the alternatives are.
+        </p>
+        <ul class="services">
+          {services.map((s) => (
+            <li><a href={`/services/${s.id}/`}>{s.data.title}</a></li>
+          ))}
+        </ul>
+      </section>
+
+      <section class="block">
+        <h2>The team</h2>
+        {clinic.dentists.map((d) => (
+          <article class="card person">
+            <h3>{d.name}</h3>
+            <p class="quals">{d.qualifications} &middot; {d.role}</p>
+            {clinic.showRegistration && d.registration && (
+              <p class="reg">Dental Council registration: {d.registration}</p>
+            )}
+            {d.bio
+              ? <p>{d.bio}</p>
+              : <p class="todo">[Biography to be added.]</p>}
+          </article>
+        ))}
+      </section>
+
+      <section class="block">
+        <h2>Your first visit</h2>
+        <div class="prose">
+          <p>
+            A first appointment is mostly examination and conversation. We look
+            at your teeth, gums and the soft tissues of the mouth, take images
+            if there is a reason to, and go through what we find. You will
+            leave knowing what — if anything — needs attention, in what order,
+            and roughly what it will cost.
+          </p>
+          <p>
+            Bring a list of any medicines you take and any medical conditions
+            you are being treated for. Both can affect dental treatment, and
+            knowing about them in advance changes what we recommend.
+          </p>
+        </div>
+      </section>
+
+      <aside class="cta">
+        <h2>Book an appointment</h2>
+        <p>Phone the clinic, or send a request and we will call you back.</p>
+        <p class="cta-actions">
+          <a href={clinic.phoneHref} class="btn btn--accent">Call {clinic.phone}</a>
+          <a href="/contact/" class="btn btn--ghost">Request an appointment</a>
+        </p>
+      </aside>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .block { margin-top: 3.25rem; }
+  .block > h2 { font-size: 1.6rem; margin-bottom: .5rem; }
+  .sub { color: var(--ink-muted); max-width: 60ch; margin-bottom: 1.5rem; }
+
+  .stack { display: grid; gap: 1.1rem; margin-top: 1.5rem; }
+  .item {
+    padding-left: 1.2rem;
+    border-left: 3px solid var(--orange-300);
+  }
+  .item h3 { font-size: 1.1rem; margin-bottom: .3rem; }
+  .item p { margin-bottom: 0; color: var(--ink-muted); }
+
+  .services {
+    list-style: none; padding: 0; margin: 0;
+    display: grid; gap: .6rem;
+  }
+  @media (min-width: 620px) { .services { grid-template-columns: 1fr 1fr; } }
+  .services a {
+    display: block; padding: .7rem 1rem;
+    background: var(--navy-50); border-radius: var(--radius);
+    text-decoration: none; font-weight: 500;
+    border: 1px solid transparent;
+  }
+  .services a:hover { border-color: var(--orange-300); background: var(--orange-100); }
+
+  .person h3 { margin-bottom: .2rem; }
+  .quals { color: var(--orange-700); font-weight: 600; font-size: .9375rem; margin-bottom: .2rem; }
+  .reg { color: var(--ink-muted); font-size: .875rem; margin-bottom: .8rem; }
+  .todo { color: var(--ink-muted); font-style: italic; }
+
+  .cta {
+    margin-top: 3.25rem; padding: 1.8rem;
+    border: 1px solid var(--line); border-left: 4px solid var(--orange-500);
+    border-radius: var(--radius-lg);
+  }
+  .cta h2 { font-size: 1.3rem; }
+  .cta-actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-bottom: 0; }
+</style>

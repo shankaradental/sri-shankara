@@ -1,0 +1,52 @@
+name: Daily dental news
+
+# GitHub's cloud is the server. Nothing of yours needs to be switched on.
+on:
+  schedule:
+    # 01:30 UTC = 07:00 IST. Cron here is always UTC.
+    - cron: '30 1 * * *'
+  workflow_dispatch: # lets you trigger a run by hand from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-news
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Generate today's article
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          REVIEWED_BY: ${{ vars.REVIEWED_BY }}
+        run: node scripts/generate-article.mjs
+
+      - name: Compliance check
+        run: node scripts/check-compliance.mjs
+
+      - name: Verify the site still builds
+        run: |
+          npm ci
+          npm run build
+
+      - name: Commit and push
+        run: |
+          git config user.name  "Sri Shankara news bot"
+          git config user.email "actions@users.noreply.github.com"
+          if [ -z "$(git status --porcelain src/content/news)" ]; then
+            echo "No new article — nothing to commit."
+            exit 0
+          fi
+          git add src/content/news
+          git commit -m "news: article for $(TZ=Asia/Kolkata date +%F)"
+          git push

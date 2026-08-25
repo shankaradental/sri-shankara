@@ -1,0 +1,109 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection, render } from 'astro:content';
+import { clinic } from '../../data/clinic';
+
+export async function getStaticPaths() {
+  const services = await getCollection('services', ({ data }) => !data.draft);
+  return services.map((entry) => ({ params: { slug: entry.id }, props: { entry } }));
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+
+const others = (await getCollection('services', ({ data }) => !data.draft))
+  .filter((s) => s.id !== entry.id)
+  .sort((a, b) => a.data.order - b.data.order)
+  .slice(0, 3);
+
+const serviceSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'MedicalProcedure',
+  name: entry.data.title,
+  description: entry.data.summary,
+  performer: { '@type': 'Dentist', name: clinic.name },
+};
+---
+<Base title={entry.data.title} description={entry.data.summary}>
+  <script slot="head" type="application/ld+json" set:html={JSON.stringify(serviceSchema)} />
+
+  <article class="section">
+    <div class="wrap-narrow">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="/">Home</a> <span aria-hidden="true">/</span>
+        <a href="/services/">Treatments</a>
+      </nav>
+
+      <h1>{entry.data.title}</h1>
+      <p class="lede">{entry.data.summary}</p>
+
+      <dl class="facts">
+        {entry.data.duration && (
+          <div><dt>Typical appointment</dt><dd>{entry.data.duration}</dd></div>
+        )}
+        {entry.data.priceRange && (
+          <div><dt>Indicative cost</dt><dd>{entry.data.priceRange}</dd></div>
+        )}
+      </dl>
+
+      <div class="prose">
+        <Content />
+      </div>
+
+      <aside class="cta">
+        <h2>Discuss this with the clinic</h2>
+        <p>
+          What suits you depends on an examination. Phone to talk it through or
+          request an appointment and we will call you back.
+        </p>
+        <p class="cta-actions">
+          <a href={clinic.phoneHref} class="btn btn--accent">Call {clinic.phone}</a>
+          <a href="/contact/" class="btn btn--ghost">Request an appointment</a>
+        </p>
+      </aside>
+
+      {others.length > 0 && (
+        <section class="related">
+          <h2>Other treatments</h2>
+          <ul>
+            {others.map((s) => (
+              <li><a href={`/services/${s.id}/`}>{s.data.title}</a></li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  </article>
+</Base>
+
+<style>
+  .crumbs { font-size: .875rem; color: var(--ink-muted); margin-bottom: 1.2rem; }
+  .crumbs a { color: var(--ink-muted); }
+  .crumbs span { margin-inline: .4rem; }
+
+  .facts {
+    display: flex; flex-wrap: wrap; gap: 1.5rem 2.5rem;
+    margin: 1.75rem 0 2.5rem; padding: 1.1rem 1.3rem;
+    background: var(--navy-50); border-radius: var(--radius);
+  }
+  .facts dt { font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--orange-700); font-weight: 600; }
+  .facts dd { margin: .2rem 0 0; font-weight: 500; }
+
+  .cta {
+    margin-top: 3rem; padding: 1.8rem;
+    border: 1px solid var(--line); border-left: 4px solid var(--orange-500);
+    border-radius: var(--radius-lg); background: #fff;
+  }
+  .cta h2 { font-size: 1.3rem; }
+  .cta-actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-bottom: 0; }
+
+  .related { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--line); }
+  .related h2 { font-size: 1.15rem; }
+  .related ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: .6rem; }
+  .related li a {
+    display: inline-block; padding: .45rem .9rem;
+    border: 1px solid var(--line); border-radius: 999px;
+    text-decoration: none; font-size: .9375rem;
+  }
+  .related li a:hover { border-color: var(--orange-300); }
+</style>

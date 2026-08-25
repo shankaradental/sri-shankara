@@ -1,0 +1,176 @@
+---
+import Base from '../layouts/Base.astro';
+import { clinic, formattedAddress, formatSessions } from '../data/clinic';
+import { getCollection } from 'astro:content';
+
+
+// Built from the services collection so the dropdown can never drift out of
+// sync with the treatments actually offered.
+const treatments = (await getCollection('services', ({ data }) => !data.draft))
+  .sort((a, b) => a.data.order - b.data.order)
+  .map((s) => s.data.title);
+
+// Web3Forms needs a free access key. Until one is set, showing the form would
+// silently swallow every enquiry — so fall back to the phone numbers instead.
+const formReady = clinic.web3formsKey && clinic.web3formsKey !== 'PLACEHOLDER';
+---
+<Base
+  title="Contact and directions"
+  description={`Sri Shankara Dental Clinic, ${formattedAddress()}. Phone ${clinic.phone}. Opening hours, directions and appointment requests.`}
+>
+  <section class="section">
+    <div class="wrap contact-grid">
+      <div>
+        <p class="eyebrow">Get in touch</p>
+        <h1>Contact the clinic</h1>
+        <p class="lede">
+          For pain or an injury, please phone rather than using the form — we
+          can advise you straight away and make time to see you.
+        </p>
+
+        <div class="details">
+          <h2>Clinic</h2>
+          <p>
+            {clinic.address.street}<br />
+            {clinic.address.locality}<br />
+            {clinic.address.city}, {clinic.address.region} {clinic.address.postalCode}
+          </p>
+          <p>
+            <a href={clinic.phoneHref}>{clinic.phone}</a> <span class="muted">(mobile)</span><br />
+            {clinic.landline && (
+              <><a href={clinic.landlineHref}>{clinic.landline}</a> <span class="muted">(clinic)</span><br /></>
+            )}
+            <a href={`mailto:${clinic.email}`}>{clinic.email}</a>
+          </p>
+
+          <h2>Opening hours</h2>
+          <dl class="hours">
+            {clinic.hours.map((h) => (
+              <div><dt>{h.day}</dt><dd>{formatSessions(h.sessions)}</dd></div>
+            ))}
+          </dl>
+        </div>
+
+        {clinic.mapEmbedUrl && (
+          <iframe
+            class="map"
+            src={clinic.mapEmbedUrl}
+            title="Map showing the clinic location"
+            loading="lazy"
+            referrerpolicy="no-referrer-when-downgrade"
+          />
+        )}
+      </div>
+
+      <div>
+        {!formReady ? (
+          <div class="form card">
+            <h2>Book by phone</h2>
+            <p>
+              The quickest way to arrange an appointment is to call the clinic
+              directly. We will find a time that suits you.
+            </p>
+            <p class="phone-big">
+              <a href={clinic.phoneHref}>{clinic.phone}</a>
+            </p>
+            {clinic.landline && (
+              <p class="phone-big">
+                <a href={clinic.landlineHref}>{clinic.landline}</a>
+              </p>
+            )}
+            <p class="form-note small">
+              Mon&ndash;Fri 9:30am&ndash;12:30pm and 4:00pm&ndash;7:00pm,
+              Saturday mornings 9:30am&ndash;12:30pm.
+            </p>
+          </div>
+        ) : (
+        <form class="form card" action="https://api.web3forms.com/submit" method="POST">
+          <h2>Request an appointment</h2>
+          <p class="form-note">We will call you back to confirm a time.</p>
+
+          <input type="hidden" name="access_key" value={clinic.web3formsKey} />
+          <input type="hidden" name="subject" value="Appointment request from the website" />
+          <input type="hidden" name="from_name" value={clinic.name} />
+          {/* Honeypot — bots fill this, humans never see it. */}
+          <input type="checkbox" name="botcheck" class="visually-hidden" style="display:none" tabindex="-1" autocomplete="off" />
+
+          <label class="field">
+            <span>Your name</span>
+            <input type="text" name="name" required autocomplete="name" />
+          </label>
+
+          <label class="field">
+            <span>Phone number</span>
+            <input type="tel" name="phone" required autocomplete="tel" inputmode="tel" />
+          </label>
+
+          <label class="field">
+            <span>Email <em>(optional)</em></span>
+            <input type="email" name="email" autocomplete="email" />
+          </label>
+
+          <label class="field">
+            <span>What do you need help with?</span>
+            <select name="reason">
+              <option>Not sure — please advise</option>
+              {treatments.map((t) => <option>{t}</option>)}
+              <option>Something else</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Anything we should know? <em>(optional)</em></span>
+            <textarea name="message" rows="4"></textarea>
+          </label>
+
+          <label class="field field--check">
+            <input type="checkbox" name="consent" required />
+            <span>
+              I agree that {clinic.name} may store my name and contact details in
+              order to respond to this enquiry and arrange an appointment. I can
+              withdraw this consent at any time by emailing{' '}
+              <a href={`mailto:${clinic.grievanceOfficer.email}`}>{clinic.grievanceOfficer.email}</a>.
+              See the <a href="/privacy/">privacy notice</a>.
+            </span>
+          </label>
+
+          <label class="field field--check">
+            <input type="checkbox" name="newsletter" />
+            <span>Also send me the clinic's dental news email. Unsubscribe any time.</span>
+          </label>
+
+          <button type="submit" class="btn btn--accent">Send request</button>
+
+          <p class="form-note small">
+            Please do not include detailed medical information in this form.
+            For anything urgent, phone <a href={clinic.phoneHref}>{clinic.phone}</a>.
+          </p>
+        </form>
+        )}
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .contact-grid { display: grid; gap: 3rem; align-items: start; }
+  @media (min-width: 900px) { .contact-grid { grid-template-columns: 1fr 1fr; } }
+
+  .details { margin-top: 2rem; }
+  .details h2 { font-size: 1.05rem; margin-top: 1.8rem; }
+
+  .hours { margin: 0; max-width: 26rem; }
+  .hours > div { display: flex; justify-content: space-between; gap: 1rem; padding-block: .22rem; border-bottom: 1px solid var(--line); }
+  .hours dt { color: var(--ink-muted); }
+  .hours dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 500; text-align: right; }
+
+  .map { width: 100%; height: 320px; border: 0; border-radius: var(--radius-lg); margin-top: 2rem; }
+
+  .form h2 { font-size: 1.3rem; margin-bottom: .3rem; }
+  .form-note { color: var(--ink-muted); font-size: .9375rem; }
+  .form-note.small { font-size: .8125rem; margin: 1.1rem 0 0; }
+  .muted { color: var(--ink-muted); font-size: .875rem; }
+  .phone-big { font-size: 1.5rem; font-weight: 600; margin-bottom: .4rem; }
+  .phone-big a { text-decoration: none; }
+  .field em { font-weight: 400; color: var(--ink-muted); font-style: normal; }
+</style>

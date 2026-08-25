@@ -1,0 +1,196 @@
+/* ==========================================================================
+   Sri Shankara Dental Clinic — design tokens
+   Brand colours sampled directly from the logo:
+     navy   #2A2E78   contrast on white 11.93:1  -> safe for all text
+     orange #EB8C30   contrast on white  2.52:1  -> FILL/ACCENT ONLY, never text on white
+   Navy on orange is 4.73:1 and near-black on orange is 7.49:1, so orange
+   buttons carry dark labels, not white ones.
+   ========================================================================== */
+
+:root {
+  --navy-900: #171939;
+  --navy-800: #1f2255;
+  --navy-700: #2A2E78; /* brand */
+  --navy-600: #3b41a0;
+  --navy-300: #a9adde;
+  --navy-100: #e8e9f6;
+  --navy-50:  #f4f5fb;
+
+  --orange-700: #b8620f;
+  --orange-600: #d1741c;
+  --orange-500: #EB8C30; /* brand */
+  --orange-300: #f6c48f;
+  --orange-100: #fdf0e2;
+
+  --ink:        #191718;
+  --ink-muted:  #57545a;
+  --line:       #e2e0e6;
+  --surface:    #ffffff;
+  --surface-2:  var(--navy-50);
+
+  --brand:        var(--navy-700);
+  --brand-strong: var(--navy-800);
+  --accent:       var(--orange-500);
+
+  --radius: 12px;
+  --radius-lg: 20px;
+  --shadow: 0 1px 2px rgb(23 25 57 / 0.06), 0 8px 24px rgb(23 25 57 / 0.06);
+
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-head: 'Fraunces', Georgia, 'Times New Roman', serif;
+
+  --wrap: 1120px;
+  --wrap-narrow: 720px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: var(--ink);
+  background: var(--surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-head);
+  color: var(--navy-800);
+  line-height: 1.15;
+  letter-spacing: -0.015em;
+  margin: 0 0 .5em;
+  font-weight: 600;
+}
+h1 { font-size: clamp(2rem, 1.4rem + 2.6vw, 3.1rem); }
+h2 { font-size: clamp(1.5rem, 1.2rem + 1.4vw, 2.1rem); }
+h3 { font-size: 1.25rem; }
+
+p { margin: 0 0 1.1em; }
+a { color: var(--navy-700); text-underline-offset: 3px; }
+a:hover { color: var(--orange-700); }
+
+img { max-width: 100%; height: auto; display: block; }
+
+:focus-visible {
+  outline: 3px solid var(--orange-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* --- layout ------------------------------------------------------------- */
+.wrap { width: min(100% - 2.5rem, var(--wrap)); margin-inline: auto; }
+.wrap-narrow { width: min(100% - 2.5rem, var(--wrap-narrow)); margin-inline: auto; }
+.section { padding-block: clamp(3rem, 6vw, 5.5rem); }
+.section--tint { background: var(--surface-2); }
+
+.grid { display: grid; gap: 1.5rem; }
+@media (min-width: 640px)  { .grid--2 { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 900px)  { .grid--3 { grid-template-columns: repeat(3, 1fr); } }
+
+.eyebrow {
+  font-size: .8125rem;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--orange-700);
+  margin-bottom: .6rem;
+}
+
+.lede { font-size: 1.175rem; color: var(--ink-muted); max-width: 62ch; }
+
+/* --- buttons ------------------------------------------------------------ */
+.btn {
+  display: inline-flex; align-items: center; gap: .5rem;
+  padding: .8rem 1.4rem;
+  border-radius: var(--radius);
+  font-weight: 600; font-size: 1rem;
+  text-decoration: none;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+}
+.btn:active { transform: translateY(1px); }
+.btn--primary { background: var(--navy-700); color: #fff; }
+.btn--primary:hover { background: var(--navy-800); color: #fff; }
+/* dark label on orange — white would only reach 2.5:1 */
+.btn--accent { background: var(--orange-500); color: var(--navy-900); }
+.btn--accent:hover { background: var(--orange-600); color: var(--navy-900); }
+.btn--ghost { border-color: var(--navy-300); color: var(--navy-700); background: transparent; }
+.btn--ghost:hover { border-color: var(--navy-700); background: var(--navy-50); }
+
+/* --- cards -------------------------------------------------------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 1.6rem;
+  box-shadow: var(--shadow);
+}
+.card h3 { margin-bottom: .35rem; }
+.card p:last-child { margin-bottom: 0; }
+.card--link { text-decoration: none; color: inherit; display: block; transition: border-color .15s ease, transform .15s ease; }
+.card--link:hover { border-color: var(--orange-300); transform: translateY(-2px); color: inherit; }
+
+.tag {
+  display: inline-block;
+  font-size: .75rem; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase;
+  padding: .25rem .6rem;
+  border-radius: 999px;
+  background: var(--navy-100);
+  color: var(--navy-800);
+}
+
+/* --- prose (article body) ----------------------------------------------- */
+.prose { max-width: 68ch; }
+.prose h2 { margin-top: 2.2em; }
+.prose h3 { margin-top: 1.8em; }
+.prose ul, .prose ol { padding-left: 1.3em; margin-bottom: 1.1em; }
+.prose li { margin-bottom: .4em; }
+.prose blockquote {
+  margin: 1.6em 0; padding: .2em 0 .2em 1.2em;
+  border-left: 4px solid var(--orange-500);
+  color: var(--ink-muted); font-style: italic;
+}
+.prose table { width: 100%; border-collapse: collapse; margin-bottom: 1.4em; font-size: .95rem; }
+.prose th, .prose td { text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--line); }
+.prose th { background: var(--navy-50); font-weight: 600; }
+.prose :where(pre, table) { overflow-x: auto; }
+
+/* --- forms -------------------------------------------------------------- */
+.field { display: block; margin-bottom: 1.1rem; }
+.field > span { display: block; font-weight: 600; font-size: .9375rem; margin-bottom: .35rem; }
+.field input, .field textarea, .field select {
+  width: 100%; padding: .7rem .85rem;
+  font: inherit; font-size: 1rem;
+  color: var(--ink); background: #fff;
+  border: 1px solid var(--line); border-radius: var(--radius);
+}
+.field input:focus, .field textarea:focus, .field select:focus { border-color: var(--navy-700); }
+.field--check { display: flex; gap: .65rem; align-items: flex-start; font-size: .9375rem; }
+.field--check input { width: auto; margin-top: .3rem; flex: none; }
+/* long consent text reads as body copy, not as a field label */
+.field--check > span { font-weight: 400; margin-bottom: 0; line-height: 1.5; }
+
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* --- skip link ---------------------------------------------------------- */
+.skip {
+  position: absolute; left: 1rem; top: -4rem;
+  background: var(--navy-800); color: #fff;
+  padding: .7rem 1.1rem; border-radius: var(--radius);
+  z-index: 100; transition: top .15s ease;
+}
+.skip:focus { top: 1rem; color: #fff; }

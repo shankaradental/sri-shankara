@@ -1,0 +1,56 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection } from 'astro:content';
+
+const posts = (await getCollection('news', ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()
+);
+
+const fmt = (d: Date) =>
+  d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+---
+<Base
+  title="Dental news"
+  description="Short, sourced summaries of new research and developments in dentistry, reviewed by a registered dentist before publication."
+>
+  <section class="section">
+    <div class="wrap">
+      <p class="eyebrow">Dental news</p>
+      <h1>From dental research</h1>
+      <p class="lede">
+        Short summaries of new work in dentistry — materials, technology, public
+        health and clinical research. Every article cites its primary source and
+        is reviewed by a registered dentist before it is published.
+      </p>
+      <p class="note">
+        These articles are general information about developments in the field.
+        They are not treatment advice, and they do not imply that any technique
+        described is offered at this clinic.
+      </p>
+
+      {posts.length === 0 ? (
+        <p style="margin-top:2.5rem">The first articles will appear here shortly.</p>
+      ) : (
+        <div class="grid grid--3" style="margin-top:2.5rem">
+          {posts.map((p) => (
+            <a class="card card--link" href={`/news/${p.id}/`}>
+              <span class="tag">{p.data.category}</span>
+              <h2 style="margin-top:.7rem;font-size:1.2rem">{p.data.title}</h2>
+              <p>{p.data.description}</p>
+              <p class="meta">{fmt(p.data.pubDate)}</p>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  </section>
+</Base>
+
+<style>
+  .note {
+    max-width: 62ch; font-size: .9375rem; color: var(--ink-muted);
+    padding: .9rem 1.1rem; background: var(--navy-50);
+    border-radius: var(--radius); margin-top: 1.4rem;
+  }
+  .meta { color: var(--ink-muted); font-size: .875rem; margin-bottom: 0; }
+</style>

@@ -1,0 +1,18 @@
+---
+import Base from '../layouts/Base.astro';
+import { clinic } from '../data/clinic';
+---
+<Base title="Page not found" description="That page does not exist." noindex={true}>
+  <section class="section">
+    <div class="wrap-narrow">
+      <p class="eyebrow">404</p>
+      <h1>That page doesn't exist</h1>
+      <p class="lede">It may have moved, or the link may be mistyped.</p>
+      <p style="display:flex;flex-wrap:wrap;gap:.8rem;margin-top:2rem">
+        <a href="/" class="btn btn--primary">Go to the homepage</a>
+        <a href="/services/" class="btn btn--ghost">Browse treatments</a>
+        <a href={clinic.phoneHref} class="btn btn--ghost">Call the clinic</a>
+      </p>
+    </div>
+  </section>
+</Base>
