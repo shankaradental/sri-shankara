@@ -14,11 +14,12 @@
  *   REVIEWED_BY     e.g. "Dr. Advaitha Anand, BDS MDS (Conservative Dentistry & Endodontics)"
  */
 
-import { writeFile, readdir } from 'node:fs/promises';
+import { writeFile, readdir, appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const REVIEWED_BY = process.env.REVIEWED_BY || 'Dr. Advaitha Anand, BDS MDS';
 const NEWS_DIR = 'src/content/news';
+const CATEGORIES = ['Research', 'Technology', 'Materials', 'Public health', 'Practice'];
 
 const PROVIDER =
   process.env.AI_PROVIDER ||
@@ -27,13 +28,54 @@ const PROVIDER =
 const KEY =
   PROVIDER === 'gemini' ? process.env.GEMINI_API_KEY : process.env.ANTHROPIC_API_KEY;
 
+/* ------------------------------------------------------------------ *
+ * Diagnostics
+ *
+ * Three runs have now failed inside this step and the Actions log is
+ * awkward to read on a phone. Everything interesting also goes to the
+ * run's Summary page, which is the first thing you see when you open
+ * a failed run — no expanding, no scrolling.
+ * ------------------------------------------------------------------ */
+
+const notes = [];
+
+function note(line) {
+  console.log(line);
+  notes.push(line);
+}
+
+async function writeSummary(heading, extra = []) {
+  const file = process.env.GITHUB_STEP_SUMMARY;
+  if (!file) return;
+  const md = [
+    `## ${heading}`,
+    '',
+    '```',
+    ...notes,
+    '```',
+    ...extra,
+    '',
+  ].join('\n');
+  try {
+    await appendFile(file, md, 'utf8');
+  } catch {
+    /* the summary is a convenience, never a reason to fail the run */
+  }
+}
+
+async function die(heading, message, extra = []) {
+  console.error(message);
+  await writeSummary(heading, [...extra, '', message]);
+  process.exit(1);
+}
+
 if (!KEY) {
-  console.error(
+  await die(
+    'No API key',
     `No API key for provider "${PROVIDER}". Set ${
       PROVIDER === 'gemini' ? 'GEMINI_API_KEY' : 'ANTHROPIC_API_KEY'
-    }.`
+    } in the repository secrets.`
   );
-  process.exit(1);
 }
 
 /** Titles already published, so the model does not repeat itself. */
@@ -104,7 +146,7 @@ async function callAnthropic(seen) {
     },
     body: JSON.stringify({
       model,
-      max_tokens: 4000,
+      max_tokens: 8000,
       system: SYSTEM,
       messages: [{ role: 'user', content: USER(seen) }],
     }),
@@ -136,8 +178,29 @@ const RETRYABLE = new Set([429, 500, 502, 503, 504]);
 const MAX_ATTEMPTS = 2;   // per model; the ladder below provides the real resilience
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function callGeminiOnce(model, seen) {
+/**
+ * Every 3.x and 2.5 Flash model thinks by default, and thinking tokens are
+ * drawn from the same output budget as the article. At the old ceiling of
+ * 4,000 the model could spend the lot reasoning and hand back an empty
+ * candidate with finishReason MAX_TOKENS — which arrives as HTTP 200 and then
+ * fails JSON.parse two lines later, looking for all the world like a broken
+ * model rather than a budget that was simply too small.
+ *
+ * So: a much higher ceiling, and thinking held to "low". An 800-word article
+ * is roughly 1,500 tokens; 16,000 leaves room for both without ever getting
+ * close to a cut-off.
+ */
+const MAX_OUTPUT_TOKENS = 16000;
+
+async function callGeminiOnce(model, seen, { thinking = true } = {}) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${KEY}`;
+
+  const generationConfig = {
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    responseMimeType: 'application/json',
+  };
+  if (thinking) generationConfig.thinkingLevel = 'low';
+
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -145,12 +208,20 @@ async function callGeminiOnce(model, seen) {
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM }] },
       contents: [{ role: 'user', parts: [{ text: USER(seen) }] }],
-      generationConfig: { maxOutputTokens: 4000, responseMimeType: 'application/json' },
+      generationConfig,
     }),
   });
 
   if (!res.ok) {
     const body = await res.text();
+
+    // Older models may not accept thinkingLevel. One clean retry without it
+    // beats dropping a working model off the ladder over one field.
+    if (res.status === 400 && thinking && /thinking/i.test(body)) {
+      note(`  ${model}: thinkingLevel not accepted — retrying without it`);
+      return callGeminiOnce(model, seen, { thinking: false });
+    }
+
     const err = new Error(`Gemini API ${res.status}: ${body.slice(0, 300)}`);
     err.status = res.status;
     err.retryable = RETRYABLE.has(res.status);
@@ -158,8 +229,47 @@ async function callGeminiOnce(model, seen) {
   }
 
   const payload = await res.json();
-  const parts = payload?.candidates?.[0]?.content?.parts ?? [];
-  return parts.map((p) => p.text ?? '').join('').trim();
+
+  // A 200 is not the same as an answer. Say exactly what came back.
+  const blocked = payload?.promptFeedback?.blockReason;
+  if (blocked) {
+    const err = new Error(`${model}: prompt blocked (${blocked})`);
+    err.retryable = false;
+    throw err;
+  }
+
+  const candidate = payload?.candidates?.[0];
+  const finish = candidate?.finishReason;
+  const usage = payload?.usageMetadata ?? {};
+  const text = (candidate?.content?.parts ?? []).map((p) => p.text ?? '').join('').trim();
+
+  note(
+    `  ${model}: finishReason=${finish ?? 'none'} ` +
+      `thoughts=${usage.thoughtsTokenCount ?? 0} ` +
+      `output=${usage.candidatesTokenCount ?? 0} ` +
+      `chars=${text.length}`
+  );
+
+  if (!text) {
+    // MAX_TOKENS here means thinking ate the budget; anything else is odd but
+    // equally worth stepping down the ladder for rather than failing the run.
+    const err = new Error(
+      `${model} returned no text (finishReason ${finish ?? 'unknown'}).` +
+        (finish === 'MAX_TOKENS'
+          ? ' The output budget was exhausted before any article was written.'
+          : '')
+    );
+    err.retryable = true;
+    throw err;
+  }
+
+  if (finish && finish !== 'STOP') {
+    const err = new Error(`${model} stopped early (finishReason ${finish}) — output would be truncated.`);
+    err.retryable = true;
+    throw err;
+  }
+
+  return text;
 }
 
 async function callGemini(seen) {
@@ -175,30 +285,29 @@ async function callGemini(seen) {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
         const text = await callGeminiOnce(model, seen);
-        console.log(`Generated with ${model}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
+        note(`Generated with ${model}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
         return text;
       } catch (e) {
         lastError = e;
         const transient = e.retryable || e.name === 'TimeoutError' || e.name === 'AbortError';
         if (!transient) {
-          console.error(`  ${model}: ${e.message}`);
+          note(`  ${model}: ${e.message}`);
           break; // a 400/404 will not fix itself — move to the next model
         }
         if (attempt < MAX_ATTEMPTS) {
           const wait = 15_000 * attempt; // 15s, then 30s
-          console.log(`  ${model} unavailable (${e.status ?? e.name}). Retrying in ${wait / 1000}s...`);
+          const why = e.status ?? (e.name && e.name !== 'Error' ? e.name : 'no usable output');
+          note(`  ${model} unavailable (${why}). Retrying in ${wait / 1000}s...`);
           await sleep(wait);
         } else {
-          console.log(`  ${model} still unavailable after ${MAX_ATTEMPTS} attempts. Trying the next model.`);
+          note(`  ${model} still failing after ${MAX_ATTEMPTS} attempts. Trying the next model.`);
         }
       }
     }
   }
 
   throw new Error(
-    `All Gemini models were unavailable. Last error: ${lastError?.message ?? 'unknown'}\n` +
-      `This is usually transient capacity pressure, not a configuration problem. ` +
-      `Tomorrow's scheduled run will try again.`
+    `All Gemini models failed. Last error: ${lastError?.message ?? 'unknown'}`
   );
 }
 
@@ -230,46 +339,82 @@ async function urlResolves(url) {
  * ------------------------------------------------------------------ */
 
 const seen = await recentTitles();
-console.log(`Provider: ${PROVIDER}`);
+note(`Provider: ${PROVIDER}`);
+if (process.env.AI_MODEL) note(`AI_MODEL override: ${process.env.AI_MODEL}`);
 
 let raw;
 try {
   raw = PROVIDER === 'gemini' ? await callGemini(seen) : await callAnthropic(seen);
 } catch (e) {
-  console.error(e.message);
-  process.exit(1);
+  await die('Could not reach a working model', e.message, [
+    '',
+    'This is usually transient capacity pressure rather than a configuration',
+    "problem. Tomorrow's scheduled run will try again on its own.",
+  ]);
 }
 
 let article;
 try {
   article = JSON.parse(raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, ''));
-} catch {
-  console.error('Model did not return valid JSON:\n', raw.slice(0, 800));
-  process.exit(1);
+} catch (e) {
+  await die('Model output was not valid JSON', e.message, [
+    '',
+    `Received ${raw.length} characters. First 800:`,
+    '',
+    '```',
+    raw.slice(0, 800),
+    '```',
+  ]);
+}
+
+/* Validate before writing. A malformed field caught here is one line in this
+ * summary; the same field caught by the build step is a wall of Astro output. */
+
+const missing = ['title', 'slug', 'description', 'body'].filter(
+  (f) => typeof article[f] !== 'string' || !article[f].trim()
+);
+if (missing.length) {
+  await die('Article was incomplete', `Missing or empty field(s): ${missing.join(', ')}`);
+}
+
+if (!CATEGORIES.includes(article.category)) {
+  note(`Category "${article.category}" is not one of the five allowed — using "Research".`);
+  article.category = 'Research';
 }
 
 if (!Array.isArray(article.sources) || article.sources.length === 0) {
-  console.error('Article has no sources. Refusing to publish.');
-  process.exit(1);
+  await die('Article had no sources', 'Refusing to publish uncited health content.');
 }
 
-console.log(`Checking ${article.sources.length} citation(s)...`);
+const slug = article.slug
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-|-$/g, '')
+  .slice(0, 80);
+
+const description =
+  article.description.length > 155
+    ? `${article.description.slice(0, 152).trimEnd()}...`
+    : article.description;
+
+note(`Checking ${article.sources.length} citation(s)...`);
 const checks = await Promise.all(
-  article.sources.map(async (s) => ({ ...s, ok: await urlResolves(s.url) }))
+  article.sources
+    .filter((s) => s && typeof s.url === 'string' && /^https?:\/\//.test(s.url))
+    .map(async (s) => ({ ...s, ok: await urlResolves(s.url) }))
 );
-checks.forEach((c) => console.log(`  ${c.ok ? 'OK  ' : 'DEAD'}  ${c.url}`));
+checks.forEach((c) => note(`  ${c.ok ? 'OK  ' : 'DEAD'}  ${c.url}`));
 
 const live = checks.filter((c) => c.ok);
 if (live.length === 0) {
-  console.error(
-    '\nEvery cited URL failed to resolve. This is the fabricated-citation failure\n' +
-      'mode — publishing would put invented sources on a healthcare site.\n' +
-      'Nothing written. The next scheduled run will try again.'
-  );
-  process.exit(1);
+  await die('Every citation failed to resolve', 'Nothing written.', [
+    '',
+    'This is the fabricated-citation failure mode — publishing would put',
+    'invented sources on a healthcare site. The next run will try again.',
+  ]);
 }
 if (live.length < checks.length) {
-  console.log(`Dropping ${checks.length - live.length} unreachable citation(s).`);
+  note(`Dropping ${checks.length - live.length} unreachable citation(s).`);
 }
 
 // Asia/Kolkata date, so the filename matches the day it publishes locally.
@@ -278,13 +423,13 @@ const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).for
 const yaml = [
   '---',
   `title: ${JSON.stringify(article.title)}`,
-  `description: ${JSON.stringify(article.description)}`,
+  `description: ${JSON.stringify(description)}`,
   `pubDate: ${today}`,
   `category: ${JSON.stringify(article.category)}`,
   `reviewedBy: ${JSON.stringify(REVIEWED_BY)}`,
   'sources:',
   ...live.flatMap((s) => [
-    `  - title: ${JSON.stringify(s.title)}`,
+    `  - title: ${JSON.stringify(s.title ?? s.url)}`,
     `    url: ${JSON.stringify(s.url)}`,
   ]),
   'draft: false',
@@ -294,6 +439,13 @@ const yaml = [
   '',
 ].join('\n');
 
-const path = join(NEWS_DIR, `${today}-${article.slug}.md`);
+const path = join(NEWS_DIR, `${today}-${slug}.md`);
 await writeFile(path, yaml, 'utf8');
-console.log(`Wrote ${path}`);
+note(`Wrote ${path}`);
+
+await writeSummary(`Published: ${article.title}`, [
+  '',
+  `**Category:** ${article.category}`,
+  `**Words:** ~${article.body.trim().split(/\s+/).length}`,
+  `**Citations kept:** ${live.length} of ${checks.length}`,
+]);
