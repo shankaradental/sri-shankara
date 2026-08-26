@@ -115,7 +115,7 @@ async function callAnthropic(seen) {
 }
 
 async function callGemini(seen) {
-  const model = process.env.AI_MODEL || 'gemini-2.5-flash';
+  const model = process.env.AI_MODEL || 'gemini-3.7-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${KEY}`;
   const res = await fetch(url, {
     method: 'POST',
