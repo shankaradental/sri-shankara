@@ -114,22 +114,79 @@ async function callAnthropic(seen) {
   return payload.content.map((b) => b.text ?? '').join('').trim();
 }
 
-async function callGemini(seen) {
-  const model = process.env.AI_MODEL || 'gemini-3.7-flash';
+/**
+ * Newest first. A brand-new model carries the most free-tier load and returns
+ * 503 most often, so we fall back down the list rather than losing the day.
+ */
+const GEMINI_FALLBACKS = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+
+const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function callGeminiOnce(model, seen) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${KEY}`;
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
+    signal: AbortSignal.timeout(120_000),
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM }] },
       contents: [{ role: 'user', parts: [{ text: USER(seen) }] }],
       generationConfig: { maxOutputTokens: 4000, responseMimeType: 'application/json' },
     }),
   });
-  if (!res.ok) throw new Error(`Gemini API ${res.status}: ${await res.text()}`);
+
+  if (!res.ok) {
+    const body = await res.text();
+    const err = new Error(`Gemini API ${res.status}: ${body.slice(0, 300)}`);
+    err.status = res.status;
+    err.retryable = RETRYABLE.has(res.status);
+    throw err;
+  }
+
   const payload = await res.json();
   const parts = payload?.candidates?.[0]?.content?.parts ?? [];
   return parts.map((p) => p.text ?? '').join('').trim();
+}
+
+async function callGemini(seen) {
+  // Try the requested model first, then the rest of the ladder.
+  const preferred = process.env.AI_MODEL;
+  const models = preferred
+    ? [preferred, ...GEMINI_FALLBACKS.filter((m) => m !== preferred)]
+    : [...GEMINI_FALLBACKS];
+
+  let lastError;
+
+  for (const model of models) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const text = await callGeminiOnce(model, seen);
+        console.log(`Generated with ${model}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
+        return text;
+      } catch (e) {
+        lastError = e;
+        const transient = e.retryable || e.name === 'TimeoutError' || e.name === 'AbortError';
+        if (!transient) {
+          console.error(`  ${model}: ${e.message}`);
+          break; // a 400/404 will not fix itself — move to the next model
+        }
+        if (attempt < 3) {
+          const wait = 15_000 * attempt; // 15s, then 30s
+          console.log(`  ${model} unavailable (${e.status ?? e.name}). Retrying in ${wait / 1000}s...`);
+          await sleep(wait);
+        } else {
+          console.log(`  ${model} still unavailable after 3 attempts. Trying the next model.`);
+        }
+      }
+    }
+  }
+
+  throw new Error(
+    `All Gemini models were unavailable. Last error: ${lastError?.message ?? 'unknown'}\n` +
+      `This is usually transient capacity pressure, not a configuration problem. ` +
+      `Tomorrow's scheduled run will try again.`
+  );
 }
 
 /* ------------------------------------------------------------------ *
