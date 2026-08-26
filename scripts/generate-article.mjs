@@ -4,22 +4,35 @@
  * Runs inside GitHub Actions — there is no server to keep awake. The workflow
  * commits whatever this writes, and Cloudflare Pages rebuilds on the push.
  *
+ * Works with either provider:
+ *   AI_PROVIDER=gemini     free tier, no credit card   (default if only GEMINI_API_KEY is set)
+ *   AI_PROVIDER=anthropic  paid, a few cents per run
+ *
  * Env:
- *   ANTHROPIC_API_KEY  required
- *   ANTHROPIC_MODEL    optional, defaults below — check the current model id
- *   REVIEWED_BY        e.g. "Dr A Sharma, BDS MDS"
+ *   GEMINI_API_KEY  /  ANTHROPIC_API_KEY   one of these, required
+ *   AI_MODEL        optional model override
+ *   REVIEWED_BY     e.g. "Dr. Advaitha Anand, BDS MDS (Conservative Dentistry & Endodontics)"
  */
 
 import { writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const API_KEY = process.env.ANTHROPIC_API_KEY;
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
-const REVIEWED_BY = process.env.REVIEWED_BY || 'Dr PLACEHOLDER, BDS';
+const REVIEWED_BY = process.env.REVIEWED_BY || 'Dr. Advaitha Anand, BDS MDS';
 const NEWS_DIR = 'src/content/news';
 
-if (!API_KEY) {
-  console.error('ANTHROPIC_API_KEY is not set.');
+const PROVIDER =
+  process.env.AI_PROVIDER ||
+  (process.env.GEMINI_API_KEY ? 'gemini' : 'anthropic');
+
+const KEY =
+  PROVIDER === 'gemini' ? process.env.GEMINI_API_KEY : process.env.ANTHROPIC_API_KEY;
+
+if (!KEY) {
+  console.error(
+    `No API key for provider "${PROVIDER}". Set ${
+      PROVIDER === 'gemini' ? 'GEMINI_API_KEY' : 'ANTHROPIC_API_KEY'
+    }.`
+  );
   process.exit(1);
 }
 
@@ -32,13 +45,26 @@ async function recentTitles(limit = 40) {
 const SYSTEM = `You write short news articles about dentistry for the website of a
 dental clinic in Dehradun, India. Your readers are patients, not clinicians.
 
+CITATIONS — the rule that matters most:
+Every article must cite at least one REAL, VERIFIABLE source: a journal article,
+a university or institutional announcement, or a regulator. The URL must be one
+you are confident actually exists and actually says what you claim.
+
+NEVER invent a citation, a DOI, a journal volume, or a URL. A fabricated source
+on a healthcare website is worse than no article at all — it is exactly what
+clause 8.1.7 of the Dentists (Code of Ethics) Regulations 2014 exists to
+prevent. Every URL you output is fetched and checked before publication, and
+the run fails if one 404s.
+
+If you are not confident a source is real, write about something else you can
+cite properly. Prefer well-established landing pages (a journal's DOI link, a
+university news page) over deep links you are less sure of.
+
 HOUSE RULES — every one is mandatory:
 - 500-800 words.
-- Report what research or a development actually found. Never overstate it.
+- Report what research actually found. Never overstate it.
 - Plain language. Explain any technical term the first time it appears.
-- Cite at least one real, verifiable primary source (journal article, university
-  or institutional announcement, regulator). Never invent a citation or a URL.
-  If you cannot cite something real, say so instead of fabricating.
+- Include the genuine limitations and trade-offs, not just the positive finding.
 - Never imply the clinic offers the technique described.
 - Never guarantee or promise an outcome.
 - No testimonials, patient stories, or quotes attributed to patients.
@@ -46,10 +72,6 @@ HOUSE RULES — every one is mandatory:
   "revolutionary", "painless", "world-class").
 - No promotional or time-limited offers.
 - Close with a short, general "what this means for patients" section.
-
-These rules exist because clause 8.1.7 of the Dentists (Code of Ethics)
-Regulations 2014 restricts lay-audience commentary on dental procedures to
-material supported by evidence-based studies.
 
 Output STRICT JSON only, no markdown fence, matching:
 {
@@ -61,39 +83,92 @@ Output STRICT JSON only, no markdown fence, matching:
   "sources": [{ "title": string, "url": string }]
 }`;
 
-const seen = await recentTitles();
+const USER = (seen) =>
+  `Write today's article. Pick a genuinely recent development in dentistry — ` +
+  `materials science, imaging, caries prevention, periodontal research, ` +
+  `oral-systemic health links, public health, or practice technology.\n\n` +
+  `Do NOT repeat any of these recent topics:\n${seen.join('\n')}`;
 
-const res = await fetch('https://api.anthropic.com/v1/messages', {
-  method: 'POST',
-  headers: {
-    'content-type': 'application/json',
-    'x-api-key': API_KEY,
-    'anthropic-version': '2023-06-01',
-  },
-  body: JSON.stringify({
-    model: MODEL,
-    max_tokens: 4000,
-    system: SYSTEM,
-    messages: [
-      {
-        role: 'user',
-        content:
-          `Write today's article. Pick a genuinely recent development in dentistry — ` +
-          `materials science, imaging, caries prevention, periodontal research, ` +
-          `oral-systemic health links, public health, or practice technology.\n\n` +
-          `Do NOT repeat any of these recent topics:\n${seen.join('\n')}`,
-      },
-    ],
-  }),
-});
+/* ------------------------------------------------------------------ *
+ * Providers
+ * ------------------------------------------------------------------ */
 
-if (!res.ok) {
-  console.error(`Anthropic API error ${res.status}: ${await res.text()}`);
-  process.exit(1);
+async function callAnthropic(seen) {
+  const model = process.env.AI_MODEL || 'claude-sonnet-4-5';
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 4000,
+      system: SYSTEM,
+      messages: [{ role: 'user', content: USER(seen) }],
+    }),
+  });
+  if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${await res.text()}`);
+  const payload = await res.json();
+  return payload.content.map((b) => b.text ?? '').join('').trim();
 }
 
-const payload = await res.json();
-const raw = payload.content.map((b) => b.text ?? '').join('').trim();
+async function callGemini(seen) {
+  const model = process.env.AI_MODEL || 'gemini-2.5-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${KEY}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM }] },
+      contents: [{ role: 'user', parts: [{ text: USER(seen) }] }],
+      generationConfig: { maxOutputTokens: 4000, responseMimeType: 'application/json' },
+    }),
+  });
+  if (!res.ok) throw new Error(`Gemini API ${res.status}: ${await res.text()}`);
+  const payload = await res.json();
+  const parts = payload?.candidates?.[0]?.content?.parts ?? [];
+  return parts.map((p) => p.text ?? '').join('').trim();
+}
+
+/* ------------------------------------------------------------------ *
+ * Citation verification — the step that makes automation safe enough
+ * ------------------------------------------------------------------ */
+
+async function urlResolves(url) {
+  for (const method of ['HEAD', 'GET']) {
+    try {
+      const res = await fetch(url, {
+        method,
+        redirect: 'follow',
+        signal: AbortSignal.timeout(20_000),
+        headers: { 'user-agent': 'Mozilla/5.0 (compatible; SriShankaraDentalBot/1.0)' },
+      });
+      // 403/405 usually means a bot wall, not a dead link — the page exists.
+      if (res.ok || res.status === 403 || res.status === 405) return true;
+      if (res.status === 404 || res.status === 410) return false;
+    } catch {
+      /* try the next method */
+    }
+  }
+  return false;
+}
+
+/* ------------------------------------------------------------------ *
+ * Run
+ * ------------------------------------------------------------------ */
+
+const seen = await recentTitles();
+console.log(`Provider: ${PROVIDER}`);
+
+let raw;
+try {
+  raw = PROVIDER === 'gemini' ? await callGemini(seen) : await callAnthropic(seen);
+} catch (e) {
+  console.error(e.message);
+  process.exit(1);
+}
 
 let article;
 try {
@@ -101,6 +176,30 @@ try {
 } catch {
   console.error('Model did not return valid JSON:\n', raw.slice(0, 800));
   process.exit(1);
+}
+
+if (!Array.isArray(article.sources) || article.sources.length === 0) {
+  console.error('Article has no sources. Refusing to publish.');
+  process.exit(1);
+}
+
+console.log(`Checking ${article.sources.length} citation(s)...`);
+const checks = await Promise.all(
+  article.sources.map(async (s) => ({ ...s, ok: await urlResolves(s.url) }))
+);
+checks.forEach((c) => console.log(`  ${c.ok ? 'OK  ' : 'DEAD'}  ${c.url}`));
+
+const live = checks.filter((c) => c.ok);
+if (live.length === 0) {
+  console.error(
+    '\nEvery cited URL failed to resolve. This is the fabricated-citation failure\n' +
+      'mode — publishing would put invented sources on a healthcare site.\n' +
+      'Nothing written. The next scheduled run will try again.'
+  );
+  process.exit(1);
+}
+if (live.length < checks.length) {
+  console.log(`Dropping ${checks.length - live.length} unreachable citation(s).`);
 }
 
 // Asia/Kolkata date, so the filename matches the day it publishes locally.
@@ -114,7 +213,7 @@ const yaml = [
   `category: ${JSON.stringify(article.category)}`,
   `reviewedBy: ${JSON.stringify(REVIEWED_BY)}`,
   'sources:',
-  ...article.sources.flatMap((s) => [
+  ...live.flatMap((s) => [
     `  - title: ${JSON.stringify(s.title)}`,
     `    url: ${JSON.stringify(s.url)}`,
   ]),

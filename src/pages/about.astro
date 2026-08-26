@@ -97,8 +97,8 @@ const facilities = [
             {clinic.showRegistration && d.registration && (
               <p class="reg">Dental Council registration: {d.registration}</p>
             )}
-            {d.bio
-              ? <p>{d.bio}</p>
+            {d.bio.length
+              ? d.bio.map((para) => <p>{para}</p>)
               : <p class="todo">[Biography to be added.]</p>}
           </article>
         ))}

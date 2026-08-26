@@ -53,11 +53,16 @@ export const clinic = {
   dentists: [
     {
       name: 'Dr. Advaitha Anand',
-      qualifications: 'MDS',
+      qualifications: 'BDS, MDS (Conservative Dentistry & Endodontics)',
       role: 'Principal Dentist',
       // Registration number deliberately not published — see showRegistration below.
       registration: '',
-      bio: '',                        // TODO: paste Dr. Anand's biography here
+      bio: [
+        'Dr. Advaitha Anand graduated with a Bachelor of Dental Surgery (BDS) from Karnataka in 2011, and went on to complete a Master of Dental Surgery (MDS) in Conservative Dentistry and Endodontics in 2023.',
+        'Conservative dentistry and endodontics is the branch concerned with saving teeth rather than replacing them — diagnosing what has gone wrong inside a tooth, treating decay and infection at the root, and restoring what remains so the natural tooth can stay in place and keep working. Root canal treatment sits at the centre of it, along with the restorative work that follows.',
+        'With over fifteen years of clinical experience, Dr. Anand practises with a preference for conserving natural tooth structure wherever it is sound enough to keep. Extraction is considered when a tooth genuinely cannot be saved, not as a shortcut, and the reasoning behind either recommendation is set out before treatment begins.',
+        'Her approach is evidence-based: treatment decisions follow what the clinical research supports, and patients are told what the options are, what each involves, and what the trade-offs are — so the decision is an informed one.',
+      ],
       slug: 'dr-advaitha-anand',
     },
   ],

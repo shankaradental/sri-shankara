@@ -26,8 +26,10 @@ jobs:
 
       - name: Generate today's article
         env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER }}
+          AI_MODEL: ${{ vars.AI_MODEL }}
           REVIEWED_BY: ${{ vars.REVIEWED_BY }}
         run: node scripts/generate-article.mjs
 
