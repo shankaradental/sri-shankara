@@ -4,7 +4,23 @@
  * Runs inside GitHub Actions — there is no server to keep awake. The workflow
  * commits whatever this writes, and Cloudflare Pages rebuilds on the push.
  *
- * Works with either provider:
+ * HOW THE CITATION PROBLEM IS SOLVED
+ * ----------------------------------
+ * The first article this job produced cited DOI 10.3389/fpubh.2023.1197060.
+ * It looked entirely plausible. It does not exist — CrossRef has no record of
+ * it. That is not a bug in the model, it is what language models do: they
+ * reconstruct the shape of a citation from memory rather than recalling one.
+ * No amount of prompting reliably fixes it.
+ *
+ * So the model is no longer asked for sources at all. This script searches
+ * Europe PMC (free, no key, no registration) for real dentistry papers
+ * published in the last few weeks, hands the model their titles and abstracts,
+ * and asks it to write about ONE of them. The citation in the finished article
+ * is built from Europe PMC's own metadata.
+ *
+ * The model never types a URL. There is nothing left for it to invent.
+ *
+ * Providers:
  *   AI_PROVIDER=gemini     free tier, no credit card   (default if only GEMINI_API_KEY is set)
  *   AI_PROVIDER=anthropic  paid, a few cents per run
  *
@@ -14,7 +30,7 @@
  *   REVIEWED_BY     e.g. "Dr. Advaitha Anand, BDS MDS (Conservative Dentistry & Endodontics)"
  */
 
-import { writeFile, readdir, appendFile } from 'node:fs/promises';
+import { writeFile, readdir, readFile, appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const REVIEWED_BY = process.env.REVIEWED_BY || 'Dr. Advaitha Anand, BDS MDS';
@@ -31,10 +47,9 @@ const KEY =
 /* ------------------------------------------------------------------ *
  * Diagnostics
  *
- * Three runs have now failed inside this step and the Actions log is
- * awkward to read on a phone. Everything interesting also goes to the
- * run's Summary page, which is the first thing you see when you open
- * a failed run — no expanding, no scrolling.
+ * Everything interesting goes to the run's Summary page as well as the log.
+ * The Summary is the first thing you see when you open a failed run — no
+ * expanding steps, no scrolling, and it is readable on a phone.
  * ------------------------------------------------------------------ */
 
 const notes = [];
@@ -47,15 +62,7 @@ function note(line) {
 async function writeSummary(heading, extra = []) {
   const file = process.env.GITHUB_STEP_SUMMARY;
   if (!file) return;
-  const md = [
-    `## ${heading}`,
-    '',
-    '```',
-    ...notes,
-    '```',
-    ...extra,
-    '',
-  ].join('\n');
+  const md = ['', `## ${heading}`, '', '```', ...notes, '```', ...extra, ''].join('\n');
   try {
     await appendFile(file, md, 'utf8');
   } catch {
@@ -78,35 +85,136 @@ if (!KEY) {
   );
 }
 
-/** Titles already published, so the model does not repeat itself. */
-async function recentTitles(limit = 40) {
-  const files = (await readdir(NEWS_DIR)).filter((f) => f.endsWith('.md')).sort().reverse();
-  return files.slice(0, limit).map((f) => f.replace(/^\d{4}-\d{2}-\d{2}-/, '').replace(/\.md$/, ''));
+/* ------------------------------------------------------------------ *
+ * What has already been published
+ * ------------------------------------------------------------------ */
+
+async function published() {
+  const files = (await readdir(NEWS_DIR)).filter((f) => f.endsWith('.md'));
+  const titles = [];
+  const urls = new Set();
+  for (const f of files) {
+    const text = await readFile(join(NEWS_DIR, f), 'utf8');
+    const t = text.match(/^title:\s*"?(.+?)"?\s*$/m);
+    if (t) titles.push(t[1]);
+    for (const m of text.matchAll(/^\s*url:\s*"?(\S+?)"?\s*$/gm)) urls.add(m[1].toLowerCase());
+  }
+  return { titles, urls };
 }
+
+/* ------------------------------------------------------------------ *
+ * Europe PMC — the source of real papers
+ * ------------------------------------------------------------------ */
+
+const TOPICS = [
+  'dental', 'dentistry', 'caries', 'periodontal', 'periodontitis',
+  'enamel', 'oral health', 'endodontic', 'root canal', 'orthodontic',
+  'dental implant', 'toothpaste', 'fluoride', 'gingivitis', 'dentine',
+];
+
+function daysAgo(n) {
+  const d = new Date(Date.now() - n * 86_400_000);
+  return d.toISOString().slice(0, 10);
+}
+
+async function searchEuropePMC(windowDays) {
+  const titleClause = TOPICS.map((t) => `TITLE:"${t}"`).join(' OR ');
+  // SRC:MED restricts this to PubMed/MEDLINE — peer-reviewed literature only.
+  // Europe PMC also indexes preprints (SRC:PPR), which have not been reviewed
+  // by anyone. Fine for a research blog, not for a clinic telling patients what
+  // the evidence says.
+  const query =
+    `(${titleClause}) AND (FIRST_PDATE:[${daysAgo(windowDays)} TO ${daysAgo(0)}]) ` +
+    `AND HAS_ABSTRACT:Y AND SRC:MED`;
+
+  const params = new URLSearchParams({
+    query,
+    format: 'json',
+    pageSize: '50',
+    resultType: 'core',
+    sort: 'P_PDATE_D desc',
+  });
+
+  const res = await fetch(
+    `https://www.ebi.ac.uk/europepmc/webservices/rest/search?${params}`,
+    { signal: AbortSignal.timeout(45_000), headers: { accept: 'application/json' } }
+  );
+  if (!res.ok) throw new Error(`Europe PMC ${res.status}: ${(await res.text()).slice(0, 200)}`);
+
+  const payload = await res.json();
+  return payload?.resultList?.result ?? [];
+}
+
+/** Widen the window until there is something worth writing about. */
+async function findCandidates(seenUrls, seenTitles) {
+  for (const windowDays of [30, 90, 240, 730]) {
+    let results;
+    try {
+      results = await searchEuropePMC(windowDays);
+    } catch (e) {
+      note(`Europe PMC search failed (${windowDays}d window): ${e.message}`);
+      continue;
+    }
+
+    const usable = results.filter((r) => {
+      if (!r.abstractText || r.abstractText.length < 400) return false;
+      if (!r.title) return false;
+      const doiUrl = r.doi ? `https://doi.org/${r.doi}`.toLowerCase() : null;
+      if (doiUrl && seenUrls.has(doiUrl)) return false;
+      // crude near-duplicate check against titles already on the site
+      const norm = (s) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '');
+      return !seenTitles.some((t) => norm(t) === norm(r.title));
+    });
+
+    note(`Europe PMC: ${results.length} hits in the last ${windowDays} days, ${usable.length} usable.`);
+    if (usable.length >= 3) return usable.slice(0, 12);
+  }
+  return [];
+}
+
+/** Public, permanent link for a paper. DOI when there is one, Europe PMC otherwise. */
+function citationUrl(paper) {
+  if (paper.doi) return `https://doi.org/${paper.doi}`;
+  return `https://europepmc.org/article/${paper.source ?? 'MED'}/${paper.id}`;
+}
+
+function citationTitle(paper) {
+  const bits = [];
+  if (paper.authorString) bits.push(paper.authorString.replace(/\.$/, ''));
+  bits.push(paper.title.replace(/\.$/, ''));
+  const where = [paper.journalTitle, paper.pubYear].filter(Boolean).join(' ');
+  if (where) bits.push(where);
+  if (paper.doi) bits.push(`DOI ${paper.doi}`);
+  return bits.join('. ');
+}
+
+/* ------------------------------------------------------------------ *
+ * Prompts
+ * ------------------------------------------------------------------ */
 
 const SYSTEM = `You write short news articles about dentistry for the website of a
 dental clinic in Dehradun, India. Your readers are patients, not clinicians.
 
-CITATIONS — the rule that matters most:
-Every article must cite at least one REAL, VERIFIABLE source: a journal article,
-a university or institutional announcement, or a regulator. The URL must be one
-you are confident actually exists and actually says what you claim.
+You will be given a numbered list of REAL, recently published papers, each with
+its abstract. Choose ONE and write an article about it.
 
-NEVER invent a citation, a DOI, a journal volume, or a URL. A fabricated source
-on a healthcare website is worse than no article at all — it is exactly what
-clause 8.1.7 of the Dentists (Code of Ethics) Regulations 2014 exists to
-prevent. Every URL you output is fetched and checked before publication, and
-the run fails if one 404s.
+THE RULE THAT MATTERS MOST:
+Every factual claim in your article must come from the abstract you were given.
+Do not add findings, figures, sample sizes, dates or conclusions that are not in
+it. Do not cite anything. Do not write any URL, DOI or reference list — the
+citation is attached automatically from the paper's own record, and anything you
+invent would be a fabricated source on a healthcare website.
 
-If you are not confident a source is real, write about something else you can
-cite properly. Prefer well-established landing pages (a journal's DOI link, a
-university news page) over deep links you are less sure of.
+If an abstract is too thin to write 500 words about honestly, pick a different
+one from the list. Prefer papers a patient would find useful or interesting over
+narrowly technical ones.
 
 HOUSE RULES — every one is mandatory:
 - 500-800 words.
-- Report what research actually found. Never overstate it.
+- Report what the research actually found. Never overstate it.
 - Plain language. Explain any technical term the first time it appears.
-- Include the genuine limitations and trade-offs, not just the positive finding.
+- State the genuine limitations: study size, whether it was in people or in a
+  laboratory, whether it shows cause or only association.
 - Never imply the clinic offers the technique described.
 - Never guarantee or promise an outcome.
 - No testimonials, patient stories, or quotes attributed to patients.
@@ -117,25 +225,36 @@ HOUSE RULES — every one is mandatory:
 
 Output STRICT JSON only, no markdown fence, matching:
 {
-  "title": string,
+  "sourceIndex": number (the number of the paper you chose, from the list),
+  "title": string (your headline — not the paper's title),
   "slug": string (kebab-case, no date),
   "description": string (<=155 chars),
   "category": "Research" | "Technology" | "Materials" | "Public health" | "Practice",
-  "body": string (markdown, ## subheadings, no H1),
-  "sources": [{ "title": string, "url": string }]
+  "body": string (markdown, ## subheadings, no H1, no reference list)
 }`;
 
-const USER = (seen) =>
-  `Write today's article. Pick a genuinely recent development in dentistry — ` +
-  `materials science, imaging, caries prevention, periodontal research, ` +
-  `oral-systemic health links, public health, or practice technology.\n\n` +
-  `Do NOT repeat any of these recent topics:\n${seen.join('\n')}`;
+const USER = (papers, seenTitles) =>
+  `Today's candidate papers:\n\n` +
+  papers
+    .map((p, i) =>
+      [
+        `[${i}] ${p.title}`,
+        `    ${p.journalTitle ?? 'Preprint'}, ${p.firstPublicationDate ?? p.pubYear ?? ''}`,
+        `    Abstract: ${p.abstractText.replace(/\s+/g, ' ').slice(0, 1800)}`,
+      ].join('\n')
+    )
+    .join('\n\n') +
+  (seenTitles.length
+    ? `\n\nArticles already on the site — do not cover the same ground:\n${seenTitles.join('\n')}`
+    : '');
 
 /* ------------------------------------------------------------------ *
  * Providers
  * ------------------------------------------------------------------ */
 
-async function callAnthropic(seen) {
+const MAX_OUTPUT_TOKENS = 16000;
+
+async function callAnthropic(user) {
   const model = process.env.AI_MODEL || 'claude-sonnet-4-5';
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -148,10 +267,10 @@ async function callAnthropic(seen) {
       model,
       max_tokens: 8000,
       system: SYSTEM,
-      messages: [{ role: 'user', content: USER(seen) }],
+      messages: [{ role: 'user', content: user }],
     }),
   });
-  if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const payload = await res.json();
   return payload.content.map((b) => b.text ?? '').join('').trim();
 }
@@ -159,11 +278,10 @@ async function callAnthropic(seen) {
 /**
  * Newest first, oldest last — deliberately.
  *
- * A just-released model carries the heaviest free-tier load and is the one
- * most likely to answer 503. Older models are quieter and far more likely to
- * have capacity, at some cost in output quality. So the ladder trades down
- * gracefully: try the best, settle for the available. All of these are
- * free-tier eligible.
+ * A just-released model carries the heaviest free-tier load and is the one most
+ * likely to answer 503; run 4 saw exactly that on gemini-3.7-flash before
+ * 3.6-flash picked it up. Older models are quieter and far more likely to have
+ * capacity, at some cost in output quality. All of these are free-tier eligible.
  */
 const GEMINI_FALLBACKS = [
   'gemini-3.7-flash',
@@ -175,31 +293,11 @@ const GEMINI_FALLBACKS = [
 ];
 
 const RETRYABLE = new Set([429, 500, 502, 503, 504]);
-const MAX_ATTEMPTS = 2;   // per model; the ladder below provides the real resilience
+const MAX_ATTEMPTS = 2;   // per model; the ladder provides the real resilience
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/**
- * Every 3.x and 2.5 Flash model thinks by default, and thinking tokens are
- * drawn from the same output budget as the article. At the old ceiling of
- * 4,000 the model could spend the lot reasoning and hand back an empty
- * candidate with finishReason MAX_TOKENS — which arrives as HTTP 200 and then
- * fails JSON.parse two lines later, looking for all the world like a broken
- * model rather than a budget that was simply too small.
- *
- * So: a much higher ceiling, and thinking held to "low". An 800-word article
- * is roughly 1,500 tokens; 16,000 leaves room for both without ever getting
- * close to a cut-off.
- */
-const MAX_OUTPUT_TOKENS = 16000;
-
-async function callGeminiOnce(model, seen, { thinking = true } = {}) {
+async function callGeminiOnce(model, user) {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${KEY}`;
-
-  const generationConfig = {
-    maxOutputTokens: MAX_OUTPUT_TOKENS,
-    responseMimeType: 'application/json',
-  };
-  if (thinking) generationConfig.thinkingLevel = 'low';
 
   const res = await fetch(url, {
     method: 'POST',
@@ -207,21 +305,19 @@ async function callGeminiOnce(model, seen, { thinking = true } = {}) {
     signal: AbortSignal.timeout(120_000),
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM }] },
-      contents: [{ role: 'user', parts: [{ text: USER(seen) }] }],
-      generationConfig,
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      // These models think by default and thinking tokens come out of this same
+      // budget. Run 4 spent 2,356 on thinking and 956 on the article — which
+      // would have been a truncated mess under the old 4,000 ceiling.
+      generationConfig: {
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
+        responseMimeType: 'application/json',
+      },
     }),
   });
 
   if (!res.ok) {
     const body = await res.text();
-
-    // Older models may not accept thinkingLevel. One clean retry without it
-    // beats dropping a working model off the ladder over one field.
-    if (res.status === 400 && thinking && /thinking/i.test(body)) {
-      note(`  ${model}: thinkingLevel not accepted — retrying without it`);
-      return callGeminiOnce(model, seen, { thinking: false });
-    }
-
     const err = new Error(`Gemini API ${res.status}: ${body.slice(0, 300)}`);
     err.status = res.status;
     err.retryable = RETRYABLE.has(res.status);
@@ -230,7 +326,6 @@ async function callGeminiOnce(model, seen, { thinking = true } = {}) {
 
   const payload = await res.json();
 
-  // A 200 is not the same as an answer. Say exactly what came back.
   const blocked = payload?.promptFeedback?.blockReason;
   if (blocked) {
     const err = new Error(`${model}: prompt blocked (${blocked})`);
@@ -251,13 +346,9 @@ async function callGeminiOnce(model, seen, { thinking = true } = {}) {
   );
 
   if (!text) {
-    // MAX_TOKENS here means thinking ate the budget; anything else is odd but
-    // equally worth stepping down the ladder for rather than failing the run.
     const err = new Error(
       `${model} returned no text (finishReason ${finish ?? 'unknown'}).` +
-        (finish === 'MAX_TOKENS'
-          ? ' The output budget was exhausted before any article was written.'
-          : '')
+        (finish === 'MAX_TOKENS' ? ' The output budget was exhausted before any article was written.' : '')
     );
     err.retryable = true;
     throw err;
@@ -272,8 +363,7 @@ async function callGeminiOnce(model, seen, { thinking = true } = {}) {
   return text;
 }
 
-async function callGemini(seen) {
-  // Try the requested model first, then the rest of the ladder.
+async function callGemini(user) {
   const preferred = process.env.AI_MODEL;
   const models = preferred
     ? [preferred, ...GEMINI_FALLBACKS.filter((m) => m !== preferred)]
@@ -284,7 +374,7 @@ async function callGemini(seen) {
   for (const model of models) {
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        const text = await callGeminiOnce(model, seen);
+        const text = await callGeminiOnce(model, user);
         note(`Generated with ${model}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
         return text;
       } catch (e) {
@@ -306,16 +396,19 @@ async function callGemini(seen) {
     }
   }
 
-  throw new Error(
-    `All Gemini models failed. Last error: ${lastError?.message ?? 'unknown'}`
-  );
+  throw new Error(`All Gemini models failed. Last error: ${lastError?.message ?? 'unknown'}`);
 }
 
 /* ------------------------------------------------------------------ *
- * Citation verification — the step that makes automation safe enough
+ * Belt and braces: the citation came from Europe PMC, but check the DOI
+ * actually resolves before putting it on the site.
+ *
+ * Only a definite 404/410 counts as dead. A 403 is a bot wall and a 5xx is the
+ * publisher having a bad day — neither means the paper does not exist, and
+ * neither should throw away a citation we know is real.
  * ------------------------------------------------------------------ */
 
-async function urlResolves(url) {
+async function urlStatus(url) {
   for (const method of ['HEAD', 'GET']) {
     try {
       const res = await fetch(url, {
@@ -324,32 +417,46 @@ async function urlResolves(url) {
         signal: AbortSignal.timeout(20_000),
         headers: { 'user-agent': 'Mozilla/5.0 (compatible; SriShankaraDentalBot/1.0)' },
       });
-      // 403/405 usually means a bot wall, not a dead link — the page exists.
-      if (res.ok || res.status === 403 || res.status === 405) return true;
-      if (res.status === 404 || res.status === 410) return false;
+      if (res.ok) return 'ok';
+      if (res.status === 404 || res.status === 410) return 'dead';
+      return 'unverified';
     } catch {
       /* try the next method */
     }
   }
-  return false;
+  return 'unverified';
 }
 
 /* ------------------------------------------------------------------ *
  * Run
  * ------------------------------------------------------------------ */
 
-const seen = await recentTitles();
 note(`Provider: ${PROVIDER}`);
 if (process.env.AI_MODEL) note(`AI_MODEL override: ${process.env.AI_MODEL}`);
 
+const { titles: seenTitles, urls: seenUrls } = await published();
+note(`${seenTitles.length} article(s) already published.`);
+
+const papers = await findCandidates(seenUrls, seenTitles);
+if (papers.length === 0) {
+  await die(
+    'No new papers to write about',
+    'Europe PMC returned nothing usable that has not already been covered.',
+    ['', 'Not a failure of the pipeline — just a quiet week. The next run will look again.']
+  );
+}
+note(`Offering ${papers.length} papers to the model.`);
+
+const user = USER(papers, seenTitles);
+
 let raw;
 try {
-  raw = PROVIDER === 'gemini' ? await callGemini(seen) : await callAnthropic(seen);
+  raw = PROVIDER === 'gemini' ? await callGemini(user) : await callAnthropic(user);
 } catch (e) {
   await die('Could not reach a working model', e.message, [
     '',
-    'This is usually transient capacity pressure rather than a configuration',
-    "problem. Tomorrow's scheduled run will try again on its own.",
+    'Usually transient capacity pressure rather than a configuration problem.',
+    "Tomorrow's scheduled run will try again on its own.",
   ]);
 }
 
@@ -367,9 +474,6 @@ try {
   ]);
 }
 
-/* Validate before writing. A malformed field caught here is one line in this
- * summary; the same field caught by the build step is a wall of Astro output. */
-
 const missing = ['title', 'slug', 'description', 'body'].filter(
   (f) => typeof article[f] !== 'string' || !article[f].trim()
 );
@@ -377,13 +481,40 @@ if (missing.length) {
   await die('Article was incomplete', `Missing or empty field(s): ${missing.join(', ')}`);
 }
 
+const idx = Number(article.sourceIndex);
+if (!Number.isInteger(idx) || idx < 0 || idx >= papers.length) {
+  await die(
+    'Model did not choose a valid paper',
+    `sourceIndex was ${JSON.stringify(article.sourceIndex)}; expected 0–${papers.length - 1}.`
+  );
+}
+const paper = papers[idx];
+note(`Chose [${idx}] ${paper.title}`);
+
 if (!CATEGORIES.includes(article.category)) {
   note(`Category "${article.category}" is not one of the five allowed — using "Research".`);
   article.category = 'Research';
 }
 
-if (!Array.isArray(article.sources) || article.sources.length === 0) {
-  await die('Article had no sources', 'Refusing to publish uncited health content.');
+/* If the model wrote a URL anywhere in the body despite being told not to,
+ * strip the article rather than risk an invented link going live. */
+const strayUrl = article.body.match(/https?:\/\/\S+|\b10\.\d{4,9}\/\S+/);
+if (strayUrl) {
+  await die(
+    'Model wrote a link into the body',
+    `Found "${strayUrl[0]}". The body must contain no URLs or DOIs — the citation is attached automatically.`,
+    ['', 'Nothing written. This guard exists because an invented link is worse than no article.']
+  );
+}
+
+const url = citationUrl(paper);
+const status = await urlStatus(url);
+note(`Citation ${status.toUpperCase()}: ${url}`);
+if (status === 'dead') {
+  await die('The paper\'s own link does not resolve', `${url} returned 404/410.`, [
+    '',
+    'Europe PMC listed this paper but its DOI is not resolving. Nothing written.',
+  ]);
 }
 
 const slug = article.slug
@@ -397,26 +528,6 @@ const description =
     ? `${article.description.slice(0, 152).trimEnd()}...`
     : article.description;
 
-note(`Checking ${article.sources.length} citation(s)...`);
-const checks = await Promise.all(
-  article.sources
-    .filter((s) => s && typeof s.url === 'string' && /^https?:\/\//.test(s.url))
-    .map(async (s) => ({ ...s, ok: await urlResolves(s.url) }))
-);
-checks.forEach((c) => note(`  ${c.ok ? 'OK  ' : 'DEAD'}  ${c.url}`));
-
-const live = checks.filter((c) => c.ok);
-if (live.length === 0) {
-  await die('Every citation failed to resolve', 'Nothing written.', [
-    '',
-    'This is the fabricated-citation failure mode — publishing would put',
-    'invented sources on a healthcare site. The next run will try again.',
-  ]);
-}
-if (live.length < checks.length) {
-  note(`Dropping ${checks.length - live.length} unreachable citation(s).`);
-}
-
 // Asia/Kolkata date, so the filename matches the day it publishes locally.
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
 
@@ -428,10 +539,8 @@ const yaml = [
   `category: ${JSON.stringify(article.category)}`,
   `reviewedBy: ${JSON.stringify(REVIEWED_BY)}`,
   'sources:',
-  ...live.flatMap((s) => [
-    `  - title: ${JSON.stringify(s.title ?? s.url)}`,
-    `    url: ${JSON.stringify(s.url)}`,
-  ]),
+  `  - title: ${JSON.stringify(citationTitle(paper))}`,
+  `    url: ${JSON.stringify(url)}`,
   'draft: false',
   '---',
   '',
@@ -445,7 +554,9 @@ note(`Wrote ${path}`);
 
 await writeSummary(`Published: ${article.title}`, [
   '',
+  `**Source paper:** ${paper.title}`,
+  `**Journal:** ${paper.journalTitle ?? 'Preprint'} (${paper.firstPublicationDate ?? paper.pubYear ?? '—'})`,
+  `**Citation:** ${url}`,
   `**Category:** ${article.category}`,
   `**Words:** ~${article.body.trim().split(/\s+/).length}`,
-  `**Citations kept:** ${live.length} of ${checks.length}`,
 ]);
