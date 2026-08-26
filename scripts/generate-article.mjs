@@ -115,12 +115,25 @@ async function callAnthropic(seen) {
 }
 
 /**
- * Newest first. A brand-new model carries the most free-tier load and returns
- * 503 most often, so we fall back down the list rather than losing the day.
+ * Newest first, oldest last — deliberately.
+ *
+ * A just-released model carries the heaviest free-tier load and is the one
+ * most likely to answer 503. Older models are quieter and far more likely to
+ * have capacity, at some cost in output quality. So the ladder trades down
+ * gracefully: try the best, settle for the available. All of these are
+ * free-tier eligible.
  */
-const GEMINI_FALLBACKS = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite'];
+const GEMINI_FALLBACKS = [
+  'gemini-3.7-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+];
 
 const RETRYABLE = new Set([429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 2;   // per model; the ladder below provides the real resilience
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function callGeminiOnce(model, seen) {
@@ -159,7 +172,7 @@ async function callGemini(seen) {
   let lastError;
 
   for (const model of models) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
         const text = await callGeminiOnce(model, seen);
         console.log(`Generated with ${model}${attempt > 1 ? ` (attempt ${attempt})` : ''}`);
@@ -171,12 +184,12 @@ async function callGemini(seen) {
           console.error(`  ${model}: ${e.message}`);
           break; // a 400/404 will not fix itself — move to the next model
         }
-        if (attempt < 3) {
+        if (attempt < MAX_ATTEMPTS) {
           const wait = 15_000 * attempt; // 15s, then 30s
           console.log(`  ${model} unavailable (${e.status ?? e.name}). Retrying in ${wait / 1000}s...`);
           await sleep(wait);
         } else {
-          console.log(`  ${model} still unavailable after 3 attempts. Trying the next model.`);
+          console.log(`  ${model} still unavailable after ${MAX_ATTEMPTS} attempts. Trying the next model.`);
         }
       }
     }
