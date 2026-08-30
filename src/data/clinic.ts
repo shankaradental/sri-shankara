@@ -30,11 +30,17 @@ export const clinic = {
     country: 'IN',
   },
 
-  // Latitude/longitude of the clinic entrance. Pull from Google Maps.
-  geo: { lat: 0, lng: 0 },            // TODO
+  // Latitude/longitude of the clinic entrance, decoded from the Google Plus
+  // Code below. Feeds the GeoCoordinates block in the schema, which is what
+  // the local map pack reads.
+  geo: { lat: 30.329812, lng: 78.072937 },
+  plusCode: '83HF+W5 Dehradun, Uttarakhand',
 
-  // Paste the Google Maps "share > embed" URL here.
-  mapEmbedUrl: '',                    // TODO
+  // Deliberately empty. A Google Maps iframe loads third-party scripts and sets
+  // cookies, which would make the privacy notice's "no tracking cookies, no
+  // third-party analytics" statement untrue. The contact page links out to
+  // directions instead — same destination for the patient, nothing loaded here.
+  mapEmbedUrl: '',
 
   // --- Opening hours -------------------------------------------------------
   // Each day has zero or more sessions. The clinic closes for the middle of

@@ -35,6 +35,20 @@ const formReady = clinic.web3formsKey && clinic.web3formsKey !== 'PLACEHOLDER';
             {clinic.address.locality}<br />
             {clinic.address.city}, {clinic.address.region} {clinic.address.postalCode}
           </p>
+
+          <p class="pluscode">
+            Plus Code <strong>{clinic.plusCode.split(' ')[0]}</strong>
+            <span class="muted"> — type this into Google Maps to land on our door</span>
+          </p>
+
+          <p>
+            <a
+              class="btn btn--ghost"
+              href={`https://www.google.com/maps/dir/?api=1&destination=${clinic.geo.lat},${clinic.geo.lng}`}
+              target="_blank"
+              rel="noopener"
+            >Get directions</a>
+          </p>
           <p>
             <a href={clinic.phoneHref}>{clinic.phone}</a> <span class="muted">(mobile)</span><br />
             {clinic.landline && (
@@ -170,6 +184,8 @@ const formReady = clinic.web3formsKey && clinic.web3formsKey !== 'PLACEHOLDER';
   .form-note { color: var(--ink-muted); font-size: .9375rem; }
   .form-note.small { font-size: .8125rem; margin: 1.1rem 0 0; }
   .muted { color: var(--ink-muted); font-size: .875rem; }
+  .pluscode { font-size: .95rem; margin-bottom: 1rem; }
+  .pluscode strong { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--navy-700); }
   .phone-big { font-size: 1.5rem; font-weight: 600; margin-bottom: .4rem; }
   .phone-big a { text-decoration: none; }
   .field em { font-weight: 400; color: var(--ink-muted); font-style: normal; }
