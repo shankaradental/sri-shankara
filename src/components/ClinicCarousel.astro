@@ -1,0 +1,261 @@
+---
+/**
+ * Photographs of the clinic, on the homepage.
+ *
+ * Built on CSS scroll-snap rather than a carousel library: the track is a
+ * normal horizontally scrolling element, so touch swipe and trackpad scroll
+ * work with no JavaScript at all. The buttons, dots and autoplay are
+ * progressive enhancement on top of that.
+ */
+
+const slides = [
+  {
+    file: 'clinic-entrance',
+    caption: 'Nalapani Road, Tapovan Enclave',
+    alt:
+      'The entrance to Sri Shankara Dental Clinic on Nalapani Road, Tapovan Enclave, ' +
+      'with the clinic sign above the glass frontage and the opening hours on the door.',
+  },
+  {
+    file: 'reception',
+    caption: 'Reception',
+    alt:
+      'The reception area of the clinic, with seating and oral health information ' +
+      'displayed on the partition beside the desk.',
+  },
+  {
+    file: 'dr-advaitha-anand',
+    caption: 'Dr. Advaitha Anand — BDS, MDS (Conservative Dentistry & Endodontics)',
+    alt:
+      'Dr. Advaitha Anand at her desk in the clinic, with the autoclave and ' +
+      'instrument preparation area behind her.',
+  },
+  {
+    file: 'operatory',
+    caption: 'Digital radiography, reviewed with you chairside',
+    alt:
+      'A chairside monitor in the treatment room showing a digital dental X-ray, ' +
+      'with the overhead treatment light and a prepared instrument tray alongside.',
+  },
+  {
+    file: 'treatment-room',
+    caption: 'The treatment room',
+    alt: 'The dental chair and instrument console in the clinic treatment room.',
+  },
+];
+---
+
+<section class="section photos" aria-labelledby="photos-heading">
+  <div class="wrap">
+    <p class="eyebrow">The clinic</p>
+    <h2 id="photos-heading">Have a look around before you visit</h2>
+
+    <div
+      class="carousel"
+      id="clinicCarousel"
+      role="group"
+      aria-roledescription="carousel"
+      aria-label="Photographs of Sri Shankara Dental Clinic"
+    >
+      <ul class="track" id="carouselTrack" tabindex="0">
+        {slides.map((s, i) => (
+          <li
+            class="slide"
+            role="group"
+            aria-roledescription="slide"
+            aria-label={`${i + 1} of ${slides.length}`}
+          >
+            <figure>
+              <picture>
+                <source
+                  type="image/webp"
+                  srcset={`/photos/${s.file}-900.webp 900w, /photos/${s.file}-1800.webp 1800w`}
+                  sizes="(min-width: 1120px) 1080px, 100vw"
+                />
+                <img
+                  src={`/photos/${s.file}-1800.jpg`}
+                  srcset={`/photos/${s.file}-900.jpg 900w, /photos/${s.file}-1800.jpg 1800w`}
+                  sizes="(min-width: 1120px) 1080px, 100vw"
+                  width="1800"
+                  height="1200"
+                  alt={s.alt}
+                  loading={i === 0 ? 'eager' : 'lazy'}
+                  decoding="async"
+                />
+              </picture>
+              <figcaption>{s.caption}</figcaption>
+            </figure>
+          </li>
+        ))}
+      </ul>
+
+      <button class="nav nav--prev" type="button" data-dir="-1" aria-label="Previous photo">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+      </button>
+      <button class="nav nav--next" type="button" data-dir="1" aria-label="Next photo">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+      </button>
+    </div>
+
+    <div class="dots" id="carouselDots" role="tablist" aria-label="Choose a photo">
+      {slides.map((s, i) => (
+        <button
+          type="button"
+          role="tab"
+          class="dot"
+          data-index={i}
+          aria-label={s.caption}
+          aria-selected={i === 0 ? 'true' : 'false'}
+        ></button>
+      ))}
+    </div>
+  </div>
+</section>
+
+<script is:inline>
+  (() => {
+    const track = document.getElementById('carouselTrack');
+    if (!track) return;
+    const carousel = document.getElementById('clinicCarousel');
+    const dots = [...document.querySelectorAll('#carouselDots .dot')];
+    const slides = [...track.children];
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    let index = 0;
+    let paused = false;
+
+    const go = (i, smooth = true) => {
+      index = (i + slides.length) % slides.length;
+      track.scrollTo({
+        left: slides[index].offsetLeft - track.offsetLeft,
+        behavior: smooth && !reduced.matches ? 'smooth' : 'auto',
+      });
+    };
+
+    const sync = () => {
+      // Whichever slide is nearest the left edge is the current one.
+      const mid = track.scrollLeft + track.clientWidth / 2;
+      let nearest = 0;
+      let best = Infinity;
+      slides.forEach((s, i) => {
+        const c = s.offsetLeft - track.offsetLeft + s.clientWidth / 2;
+        const d = Math.abs(c - mid);
+        if (d < best) { best = d; nearest = i; }
+      });
+      if (nearest !== index) index = nearest;
+      dots.forEach((d, i) => d.setAttribute('aria-selected', i === index ? 'true' : 'false'));
+    };
+
+    let raf;
+    track.addEventListener('scroll', () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(sync);
+    }, { passive: true });
+
+    document.querySelectorAll('#clinicCarousel .nav').forEach((b) =>
+      b.addEventListener('click', () => { paused = true; go(index + Number(b.dataset.dir)); })
+    );
+    dots.forEach((d) =>
+      d.addEventListener('click', () => { paused = true; go(Number(d.dataset.index)); })
+    );
+
+    track.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') { paused = true; go(index + 1); e.preventDefault(); }
+      if (e.key === 'ArrowLeft')  { paused = true; go(index - 1); e.preventDefault(); }
+    });
+
+    // Gentle autoplay, but never against someone's wishes: it stops the moment
+    // anyone touches the controls, while the pointer or keyboard focus is
+    // inside it, when the tab is hidden, or if reduced motion is requested.
+    let hovering = false;
+    carousel.addEventListener('pointerenter', () => { hovering = true; });
+    carousel.addEventListener('pointerleave', () => { hovering = false; });
+    carousel.addEventListener('focusin', () => { paused = true; });
+
+    setInterval(() => {
+      if (paused || hovering || document.hidden || reduced.matches) return;
+      go(index + 1);
+    }, 6000);
+
+    sync();
+  })();
+</script>
+
+<style>
+  .photos h2 { margin-bottom: 1.25rem; }
+
+  .carousel { position: relative; }
+
+  .track {
+    display: flex;
+    gap: 0;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    border-radius: var(--radius-lg);
+    background: var(--navy-50);
+  }
+  .track::-webkit-scrollbar { display: none; }
+  .track:focus-visible { outline: 3px solid var(--orange-500); outline-offset: 3px; }
+
+  .slide { flex: 0 0 100%; scroll-snap-align: center; }
+  .slide figure { position: relative; margin: 0; }
+  .slide img {
+    width: 100%;
+    aspect-ratio: 3 / 2;
+    object-fit: cover;
+    display: block;
+  }
+
+  figcaption {
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 2.5rem 1.1rem .9rem;
+    color: #fff;
+    font-size: .95rem;
+    font-weight: 500;
+    text-shadow: 0 1px 3px rgb(0 0 0 / .5);
+    background: linear-gradient(to top, rgb(23 25 57 / .78), rgb(23 25 57 / 0));
+  }
+
+  .nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2.75rem;
+    height: 2.75rem;
+    display: grid;
+    place-items: center;
+    border: none;
+    border-radius: 50%;
+    background: rgb(255 255 255 / .92);
+    color: var(--navy-800);
+    cursor: pointer;
+    box-shadow: var(--shadow);
+    transition: background .15s ease, transform .15s ease;
+  }
+  .nav:hover { background: #fff; transform: translateY(-50%) scale(1.06); }
+  .nav:focus-visible { outline: 3px solid var(--orange-500); outline-offset: 2px; }
+  .nav svg { width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+  .nav--prev { left: .7rem; }
+  .nav--next { right: .7rem; }
+
+  .dots { display: flex; justify-content: center; gap: .5rem; margin-top: 1rem; }
+  .dot {
+    width: .55rem; height: .55rem; padding: 0;
+    border: none; border-radius: 50%;
+    background: var(--navy-300);
+    cursor: pointer;
+    transition: background .15s ease, transform .15s ease;
+  }
+  .dot[aria-selected='true'] { background: var(--orange-500); transform: scale(1.35); }
+  .dot:focus-visible { outline: 3px solid var(--orange-500); outline-offset: 3px; }
+
+  @media (max-width: 560px) {
+    .nav { width: 2.25rem; height: 2.25rem; }
+    figcaption { font-size: .85rem; padding: 2rem .9rem .75rem; }
+  }
+</style>

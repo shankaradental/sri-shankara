@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import ClinicCarousel from '../components/ClinicCarousel.astro';
 import { clinic, formatSessions } from '../data/clinic';
 import { getCollection } from 'astro:content';
 
@@ -59,6 +60,8 @@ const fmt = (d: Date) =>
       </aside>
     </div>
   </section>
+
+  <ClinicCarousel />
 
   <section class="section">
     <div class="wrap">
