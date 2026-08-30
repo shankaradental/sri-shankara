@@ -14,10 +14,19 @@ const treatments = (await getCollection('services', ({ data }) => !data.draft))
 // silently swallow every enquiry — so fall back to the phone numbers instead.
 const formReady = clinic.web3formsKey && clinic.web3formsKey !== 'PLACEHOLDER';
 
-// Built from the coordinates so there is only one source of truth for where
-// the clinic is. Keyless Google embed — no API key needed.
-const mapSrc =
-  `https://www.google.com/maps?q=${clinic.geo.lat},${clinic.geo.lng}&z=17&hl=en&output=embed`;
+// Built from the coordinates so there is only one source of truth for where the
+// clinic is. Keyless Google embed — no API key needed.
+//
+// The label in brackets names the pin ourselves. Without it Google tries to look
+// up a registered business at these coordinates, finds none (the Business
+// Profile does not exist yet) and shows "Place info couldn't load". Once the
+// Business Profile is verified this can point at the real listing instead.
+const pin = encodeURIComponent(`${clinic.geo.lat},${clinic.geo.lng} (${clinic.name})`);
+const mapSrc = `https://www.google.com/maps?q=${pin}&z=17&hl=en&output=embed`;
+
+// Street View, if Google has imagery for this stretch of Nalapani Road.
+const streetViewUrl =
+  `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${clinic.geo.lat},${clinic.geo.lng}`;
 ---
 <Base
   title="Contact and directions"
@@ -53,6 +62,12 @@ const mapSrc =
               target="_blank"
               rel="noopener"
             >Get directions</a>
+            <a
+              class="btn btn--ghost"
+              href={streetViewUrl}
+              target="_blank"
+              rel="noopener"
+            >Street view</a>
           </p>
           <p>
             <a href={clinic.phoneHref}>{clinic.phone}</a> <span class="muted">(mobile)</span><br />
@@ -197,6 +212,7 @@ const mapSrc =
   .form-note.small { font-size: .8125rem; margin: 1.1rem 0 0; }
   .muted { color: var(--ink-muted); font-size: .875rem; }
   .pluscode { font-size: .95rem; margin-bottom: 1rem; }
+  .details .btn + .btn { margin-left: .5rem; }
   .pluscode strong { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--navy-700); }
   .phone-big { font-size: 1.5rem; font-weight: 600; margin-bottom: .4rem; }
   .phone-big a { text-decoration: none; }

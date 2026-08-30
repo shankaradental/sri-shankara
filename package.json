@@ -5,11 +5,12 @@
   "main": "index.js",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "node scripts/check-compliance.mjs && astro build",
     "preview": "astro preview",
     "check": "astro check",
     "check:compliance": "node scripts/check-compliance.mjs",
-    "check:launch": "node scripts/check-launch.mjs"
+    "check:launch": "node scripts/check-launch.mjs",
+    "build:only": "astro build"
   },
   "keywords": [],
   "author": "",
