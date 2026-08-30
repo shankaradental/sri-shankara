@@ -36,11 +36,10 @@ export const clinic = {
   geo: { lat: 30.329812, lng: 78.072937 },
   plusCode: '83HF+W5 Dehradun, Uttarakhand',
 
-  // Deliberately empty. A Google Maps iframe loads third-party scripts and sets
-  // cookies, which would make the privacy notice's "no tracking cookies, no
-  // third-party analytics" statement untrue. The contact page links out to
-  // directions instead — same destination for the patient, nothing loaded here.
-  mapEmbedUrl: '',
+  // The contact page builds its map URL from the coordinates above, so there is
+  // no second copy to drift. It is not loaded until the visitor presses "Show
+  // map" — a Google iframe sets cookies, and nobody should get that without
+  // asking for it on a page about their dentist.
 
   // --- Opening hours -------------------------------------------------------
   // Each day has zero or more sessions. The clinic closes for the middle of

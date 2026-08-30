@@ -13,6 +13,11 @@ const treatments = (await getCollection('services', ({ data }) => !data.draft))
 // Web3Forms needs a free access key. Until one is set, showing the form would
 // silently swallow every enquiry — so fall back to the phone numbers instead.
 const formReady = clinic.web3formsKey && clinic.web3formsKey !== 'PLACEHOLDER';
+
+// Built from the coordinates so there is only one source of truth for where
+// the clinic is. Not requested until the visitor presses "Show map".
+const mapSrc =
+  `https://www.google.com/maps?q=${clinic.geo.lat},${clinic.geo.lng}&z=17&hl=en&output=embed`;
 ---
 <Base
   title="Contact and directions"
@@ -65,15 +70,22 @@ const formReady = clinic.web3formsKey && clinic.web3formsKey !== 'PLACEHOLDER';
           </dl>
         </div>
 
-        {clinic.mapEmbedUrl && (
-          <iframe
-            class="map"
-            src={clinic.mapEmbedUrl}
-            title="Map showing the clinic location"
-            loading="lazy"
-            referrerpolicy="no-referrer-when-downgrade"
-          />
-        )}
+        <div class="map-block">
+          <h2>Map</h2>
+          <div class="map-holder" id="mapHolder" data-src={mapSrc}>
+            <div class="map-ask">
+              <p class="map-where">
+                {clinic.address.street}<br />
+                {clinic.address.locality}, {clinic.address.city}
+              </p>
+              <button type="button" class="btn btn--primary" id="showMap">Show map</button>
+              <p class="map-note">
+                Loaded from Google only when you press this, so nothing reaches
+                them just because you read this page.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div>
@@ -178,7 +190,18 @@ const formReady = clinic.web3formsKey && clinic.web3formsKey !== 'PLACEHOLDER';
   .hours dt { color: var(--ink-muted); }
   .hours dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 500; text-align: right; }
 
-  .map { width: 100%; height: 320px; border: 0; border-radius: var(--radius-lg); margin-top: 2rem; }
+  .map-block { margin-top: 2rem; }
+  .map-block h2 { font-size: 1.05rem; margin-bottom: .6rem; }
+  .map-holder {
+    height: 320px; border-radius: var(--radius-lg); overflow: hidden;
+    background: var(--navy-50); border: 1px solid var(--line);
+    display: grid; place-items: center;
+  }
+  /* Once the visitor asks for it, the iframe replaces the panel entirely. */
+  .map-holder :global(iframe) { width: 100%; height: 100%; border: 0; display: block; }
+  .map-ask { text-align: center; padding: 1.5rem; max-width: 24rem; }
+  .map-where { font-weight: 500; margin-bottom: 1rem; }
+  .map-note { font-size: .8125rem; color: var(--ink-muted); margin: .9rem 0 0; }
 
   .form h2 { font-size: 1.3rem; margin-bottom: .3rem; }
   .form-note { color: var(--ink-muted); font-size: .9375rem; }
@@ -190,3 +213,20 @@ const formReady = clinic.web3formsKey && clinic.web3formsKey !== 'PLACEHOLDER';
   .phone-big a { text-decoration: none; }
   .field em { font-weight: 400; color: var(--ink-muted); font-style: normal; }
 </style>
+
+<script is:inline>
+  (() => {
+    const holder = document.getElementById('mapHolder');
+    const btn = document.getElementById('showMap');
+    if (!holder || !btn) return;
+    btn.addEventListener('click', () => {
+      const frame = document.createElement('iframe');
+      frame.src = holder.dataset.src;
+      frame.title = 'Map showing the location of Sri Shankara Dental Clinic';
+      frame.loading = 'lazy';
+      frame.referrerPolicy = 'no-referrer-when-downgrade';
+      frame.allowFullscreen = true;
+      holder.replaceChildren(frame);
+    });
+  })();
+</script>
