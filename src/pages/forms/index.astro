@@ -1,0 +1,201 @@
+---
+import Base from '../../layouts/Base.astro';
+import { clinic } from '../../data/clinic';
+
+// Same guard the contact page uses. Without a Web3Forms key the online form
+// cannot deliver anything, so we point people at the printable version rather
+// than letting them fill in ten minutes of detail that goes nowhere.
+const formReady =
+  clinic.web3formsRegistrationKey && clinic.web3formsRegistrationKey !== 'PLACEHOLDER';
+
+const pdfs = [
+  {
+    href: '/forms/SriShankara-PatientRegistration-English.pdf',
+    label: 'English',
+    meta: '4 pages · PDF',
+  },
+  {
+    href: '/forms/SriShankara-PatientRegistration-Hindi.pdf',
+    label: 'हिन्दी (Hindi)',
+    meta: '4 पृष्ठ · PDF',
+  },
+  {
+    href: '/forms/SriShankara-PatientRegistration-Bilingual.pdf',
+    label: 'English + हिन्दी',
+    meta: '5 pages · PDF · both languages on one form',
+  },
+];
+---
+
+<Base
+  title="Patient forms"
+  description="Download the Sri Shankara Dental Clinic patient registration form in English or Hindi, or fill it in online before your visit."
+>
+  <section class="section">
+    <div class="wrap-narrow">
+      <p class="eyebrow">Before your visit</p>
+      <h1>Patient forms</h1>
+      <p class="lede">
+        Every new patient completes a registration form. It covers your contact
+        details, your general health, the medicines you take and your dental
+        history — all of which affect what treatment is safe and sensible for you.
+      </p>
+      <p>
+        Filling it in before you arrive saves about ten minutes in the waiting
+        room, and gives you time to check your medicine names at home rather
+        than trying to remember them at the desk.
+      </p>
+    </div>
+  </section>
+
+  <section class="section section--tint">
+    <div class="wrap-narrow">
+      <h2>Two ways to do it</h2>
+
+      <div class="routes">
+        <div class="card route">
+          <p class="route-num">1</p>
+          <h3>Fill it in online</h3>
+          {formReady ? (
+            <>
+              <p>
+                Complete the form in your browser and send it straight to the
+                clinic. It saves as you go, so you can stop and come back to it.
+              </p>
+              <p class="muted-sm">
+                Takes about 8 minutes. Works on a phone.
+              </p>
+              <a href="/forms/register/" class="btn btn--primary">Start the online form</a>
+            </>
+          ) : (
+            <>
+              <p>
+                The online form is being set up and will be available here
+                shortly. In the meantime, please use the printable version, or
+                simply arrive ten minutes early and complete it at the clinic.
+              </p>
+              <p class="muted-sm">We will keep this page updated.</p>
+            </>
+          )}
+        </div>
+
+        <div class="card route">
+          <p class="route-num">2</p>
+          <h3>Download and print</h3>
+          <p>
+            Print it, fill it in by hand and bring it with you. Choose the
+            language you are most comfortable reading.
+          </p>
+          <ul class="pdf-list">
+            {pdfs.map((p) => (
+              <li>
+                <a href={p.href} download>
+                  <span class="pdf-label">{p.label}</span>
+                  <span class="pdf-meta">{p.meta}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+          <p class="muted-sm">
+            No printer? Come ten minutes early and we will give you a copy at
+            the desk.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap-narrow">
+      <h2>What to bring with you</h2>
+      <ul class="bring">
+        <li>
+          <strong>A list of your current medicines</strong> — including anything
+          Ayurvedic, homoeopathic or herbal, and supplements. The strip or box
+          is easier than trying to recall the name.
+        </li>
+        <li>
+          <strong>Any recent dental X-rays</strong> from another clinic, if you
+          have them. It may save you having another taken.
+        </li>
+        <li>
+          <strong>Your insurance or scheme card</strong> if you intend to claim —
+          Ayushman Bharat PM-JAY, CGHS, ECHS, ESIC, or a private policy.
+        </li>
+        <li>
+          <strong>Your ABHA number</strong>, if you have one. It is optional.
+        </li>
+      </ul>
+
+      <div class="callout">
+        <h3>Bringing a child, or someone who needs help deciding</h3>
+        <p>
+          If the patient is under 18, or cannot give consent themselves, the
+          parent or guardian completes the responsible-person section and signs
+          the form.
+        </p>
+      </div>
+
+      <div class="callout callout--plain">
+        <h3>How your information is handled</h3>
+        <p>
+          What you write on this form is confidential and is collected, used and
+          stored in accordance with the Digital Personal Data Protection Act,
+          2023. You may ask to see it, ask us to correct it, or withdraw your
+          consent at any time. Our <a href="/privacy/">privacy notice</a> explains
+          this in full, including who processes the form when you submit it online.
+        </p>
+      </div>
+
+      <p class="closing">
+        Anything you are unsure about, leave blank and ask at your appointment —
+        or phone us on <a href={clinic.phoneHref}>{clinic.phone}</a>.{' '}
+        <strong>If you are in pain or have had an injury, please phone rather
+        than filling in a form.</strong>
+      </p>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .routes { display: grid; gap: 1.25rem; margin-top: 1.5rem; }
+  @media (min-width: 760px) { .routes { grid-template-columns: 1fr 1fr; } }
+
+  .route { position: relative; display: flex; flex-direction: column; }
+  .route-num {
+    font-family: var(--font-head);
+    font-size: 1.05rem; font-weight: 600;
+    width: 2rem; height: 2rem; display: grid; place-items: center;
+    border-radius: 50%; background: var(--orange-100); color: var(--orange-700);
+    margin-bottom: .6rem;
+  }
+  .route .btn { margin-top: auto; align-self: flex-start; }
+
+  .pdf-list { list-style: none; padding: 0; margin: 0 0 1rem; }
+  .pdf-list li + li { margin-top: .5rem; }
+  .pdf-list a {
+    display: flex; flex-direction: column; gap: .1rem;
+    padding: .7rem .9rem; border: 1px solid var(--line); border-radius: 10px;
+    text-decoration: none; color: inherit;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .pdf-list a:hover { border-color: var(--orange-300); background: var(--orange-100); color: inherit; }
+  .pdf-label { font-weight: 600; color: var(--navy-700); }
+  .pdf-meta { font-size: .8rem; color: var(--ink-muted); }
+
+  .muted-sm { font-size: .875rem; color: var(--ink-muted); }
+
+  .bring { padding-left: 1.15rem; }
+  .bring li { margin-bottom: .7rem; }
+
+  .callout {
+    border: 1px solid var(--line); border-left: 4px solid var(--orange-500);
+    border-radius: 10px; padding: 1rem 1.15rem; margin: 1.5rem 0;
+    background: var(--navy-50);
+  }
+  .callout--plain { border-left-color: var(--navy-300); background: transparent; }
+  .callout h3 { font-size: 1.05rem; margin-bottom: .35rem; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .closing { margin-top: 2rem; }
+</style>

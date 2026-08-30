@@ -78,7 +78,13 @@ export const clinic = {
   },
 
   // --- Integrations --------------------------------------------------------
-  web3formsKey: 'PLACEHOLDER',        // TODO: free access key from web3forms.com
+  // Two separate Web3Forms keys, deliberately. The registration form carries
+  // medical histories; the enquiry form carries "what are your opening hours".
+  // Separate keys mean each has its own monthly allowance, they arrive clearly
+  // apart, and the registration key can be revoked on its own without taking
+  // appointment enquiries down with it.
+  web3formsKey: 'PLACEHOLDER',        // TODO: enquiry form — key from web3forms.com
+  web3formsRegistrationKey: '22aa323f-d3b3-43af-a2df-bfbcef947181',
 
   // --- Compliance ----------------------------------------------------------
   grievanceOfficer: {
