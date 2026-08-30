@@ -11,6 +11,7 @@ const isActive = (href: string) =>
   href === '/' ? path === '/' : path.startsWith(href);
 
 const nav = [
+  { href: '/',          label: 'Home' },
   { href: '/services/', label: 'Services' },
   { href: '/about/',    label: 'About' },
   ...(hasNews ? [{ href: '/news/', label: 'Dental News' }] : []),
@@ -72,6 +73,7 @@ const nav = [
     text-decoration: none; font-weight: 500; font-size: .975rem;
     color: var(--ink); padding-block: .3rem;
     border-bottom: 2px solid transparent;
+    white-space: nowrap;
   }
   .site-nav a:hover { color: var(--navy-700); }
   .site-nav a[aria-current='page'] { color: var(--navy-700); border-bottom-color: var(--orange-500); }
@@ -79,7 +81,7 @@ const nav = [
 
   .nav-toggle { display: none; }
 
-  @media (max-width: 860px) {
+  @media (max-width: 1000px) {
     .nav-toggle {
       display: flex; flex-direction: column; gap: 5px;
       padding: .6rem; cursor: pointer; border-radius: 8px;
